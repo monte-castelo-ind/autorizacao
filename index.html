@@ -438,9 +438,17 @@ function novoCodigo(){
    'compra'  = folha de Autorização de Compra: fornecedor, itens e total,
                igual à do app de peças. O total nasce da soma das linhas e não
                é digitado, assim o que sai impresso sempre fecha com os itens. */
+function modeloDeTipo(t){
+  if(!t) return 'simples';
+  if(t.modelo==='compra')  return 'compra';
+  if(t.modelo==='simples') return 'simples';
+  /* Tipo cadastrado antes deste campo existir: deduz pelo nome, para o
+     setor não ter que esperar alguém configurar. A escolha explícita
+     em Tipos sempre manda mais que esta dedução. */
+  return /compra/i.test(String(t.nome||'')) ? 'compra' : 'simples';
+}
 function modeloDoTipo(id){
-  var t=tipos.filter(function(x){ return x.firestoreId===id; })[0];
-  return (t && t.modelo==='compra') ? 'compra' : 'simples';
+  return modeloDeTipo(tipos.filter(function(x){ return x.firestoreId===id; })[0]);
 }
 
 function linhaItem(){
@@ -765,13 +773,14 @@ window.abrirTipo=function(id){
   if(!ehAdmin){ alert('Só a diretoria cadastra tipos.'); return; }
   var t=id?tipos.filter(function(x){ return x.firestoreId===id; })[0]:null;
   var novo=!t; t=t||{};
+  var mod=novo?'simples':modeloDeTipo(t);
   modal({
     titulo:novo?'Novo tipo':esc(t.nome||''),
     body:'<div class="fld"><label>Nome do tipo</label>'
        + '<input type="text" id="t-nome" value="'+esc(t.nome||'')+'" placeholder="Autorização de hora extra"></div>'
        + '<div class="fld"><label>Modelo da folha impressa</label><select id="t-mod">'
-       +   '<option value="simples"'+(t.modelo==='compra'?'':' selected')+'>Simples — título, valor e descrição</option>'
-       +   '<option value="compra"'+(t.modelo==='compra'?' selected':'')+'>Autorização de Compra — fornecedor, itens e total</option>'
+       +   '<option value="simples"'+(mod==='compra'?'':' selected')+'>Simples — título, valor e descrição</option>'
+       +   '<option value="compra"'+(mod==='compra'?' selected':'')+'>Autorização de Compra — fornecedor, itens e total</option>'
        + '</select></div>'
        + '<div class="fld"><label style="display:flex;align-items:center;gap:8px;font-weight:400;color:var(--text)">'
        + '<input type="checkbox" id="t-val" style="width:auto" '+(t.exigeValor===false?'':'checked')+'> Exige valor em reais</label></div>'
@@ -895,7 +904,7 @@ function render(){
       ? '<div class="tw"><table><thead><tr><th>Tipo</th><th>Modelo</th><th class="r"></th></tr></thead><tbody>'
         + tipos.map(function(t){
             return '<tr><td><b>'+esc(t.nome)+'</b></td>'
-              + '<td style="color:var(--muted)">'+(t.modelo==='compra'?'Autorização de Compra'
+              + '<td style="color:var(--muted)">'+(modeloDeTipo(t)==='compra'?'Autorização de Compra'
                   :(t.exigeValor===false?'simples · sem valor':'simples · com valor'))+'</td>'
               + '<td class="r"><button class="btn btn-sm btn-ghost" onclick="abrirTipo(\'' + esc(t.firestoreId) + '\')">Editar</button></td></tr>';
           }).join('') + '</tbody></table></div>'
