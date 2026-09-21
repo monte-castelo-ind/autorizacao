@@ -288,7 +288,7 @@ td{padding:9px;border-bottom:1px solid var(--border)}
     <button class="navbtn on" data-p="meus" onclick="nav('meus')"><span class="side-ico">▤</span><span>Minhas solicitações</span></button>
     <button class="navbtn aprova-only" data-p="fila" onclick="nav('fila')"><span class="side-ico">✍</span><span>Para assinar</span></button>
     <button class="navbtn fin-only" data-p="todas" onclick="nav('todas')"><span class="side-ico">▦</span><span>Todas</span></button>
-    <button class="navbtn" data-p="verificar" onclick="nav('verificar')"><span class="side-ico">◎</span><span>Verificar código</span></button>
+    <button class="navbtn fin-only" data-p="verificar" onclick="nav('verificar')"><span class="side-ico">◎</span><span>Verificar código</span></button>
     <button class="navbtn admin-only" data-p="tipos" onclick="nav('tipos')"><span class="side-ico">◇</span><span>Tipos</span></button>
     <div class="side-foot">
       <div class="uline"><div class="uav" id="uav">?</div>
@@ -439,6 +439,7 @@ window.fecharModal=function(){ document.getElementById('modal-host').innerHTML='
 window.nav=function(p){
   if(p==='fila' && !podeAprovar) p='meus';
   if(p==='todas' && !ehFinanceiro && !ehAdmin) p='meus';
+  if(p==='verificar' && !ehFinanceiro && !ehAdmin) p='meus';
   if(p==='tipos' && !ehAdmin) p='meus';
   pagina=p;
   document.querySelectorAll('.navbtn').forEach(function(b){
@@ -897,6 +898,11 @@ window.verificar=function(){
   var r=document.getElementById('ver-res');
   if(!c){ r.innerHTML=''; return; }
   var d=docs.filter(function(x){ return String(x.codigo||'').toUpperCase()===c; })[0];
+  if(!d && !(ehAdmin||ehFinanceiro)){
+    r.innerHTML='<div class="alert a-info">A conferência por código é feita pela diretoria '
+      + 'ou pelo financeiro — eles leem todos os documentos. Encaminhe o código para eles.</div>';
+    return;
+  }
   if(!d){
     r.innerHTML='<div class="alert a-warn">▲ Nenhum documento com este código. '
       + 'Confira a digitação; se estiver certa, o documento não foi emitido por este sistema.</div>';
