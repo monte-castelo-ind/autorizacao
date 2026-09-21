@@ -63,9 +63,9 @@ textarea{min-height:88px;resize:vertical;line-height:1.55}
 #app{display:none;min-height:100vh}
 nav{position:fixed;top:0;left:0;bottom:0;width:194px;background:var(--sidebar);
     border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:3px}
-.brand{height:42px;background:var(--logo-light) no-repeat left center;background-size:contain;margin-bottom:3px}
+.brand{height:42px;background:var(--logo-light) no-repeat center center;background-size:contain;margin-bottom:3px}
 html[data-theme="dark"] .brand{background-image:var(--logo-gold)}
-.brand-cap{font-size:10px;font-weight:700;letter-spacing:1.4px;color:var(--muted);margin:0 0 15px 2px}
+.brand-cap{font-size:10px;font-weight:700;letter-spacing:1.4px;color:var(--muted);margin:0 0 15px;text-align:center}
 .navbtn{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;background:none;
         border:none;color:var(--muted);font-family:inherit;font-size:13.5px;font-weight:500;
         text-align:left;width:100%;cursor:pointer}
@@ -144,6 +144,26 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .itens th{font-size:10px;padding:5px 6px}
 .itens td{padding:3px 4px;border-bottom:1px solid var(--border)}
 .itens input{padding:6px 8px;font-size:13px;border-radius:7px}
+/* Modo compacto: a diretoria abre listas longas e precisa varrer a tela.
+   Esconde o texto corrido e aperta o cartão; o detalhe fica em Ver detalhes. */
+.compacto .doc{padding:9px 13px;margin-bottom:7px}
+.compacto .doc-tit{font-size:14px}
+.compacto .doc-desc{display:none}
+.compacto .doc-val{font-size:15.5px}
+.compacto .tag{font-size:10px;padding:1px 7px}
+.compacto .doc-btns{margin-top:7px;gap:6px}
+.compacto .doc-meta{font-size:11px}
+.compacto .kval{font-size:22px}
+.compacto .card{padding:11px 13px}
+.det{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:11px;
+     background:var(--card-2);border-radius:10px;padding:12px 14px;margin-bottom:13px}
+.det div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.det span{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.det b{font-size:13.5px;font-weight:600;overflow-wrap:anywhere}
+.det-sec{font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+         color:var(--muted);margin:0 0 7px}
+.det-txt{background:var(--card-2);border-radius:10px;padding:11px 13px;font-size:13px;
+         line-height:1.6;white-space:pre-wrap;margin-bottom:13px}
 .it-soma{text-align:right;font-size:13.5px}
 .it-soma b{font-family:'JetBrains Mono',monospace;font-size:18px;color:var(--primary)}
 
@@ -275,7 +295,8 @@ td{padding:9px;border-bottom:1px solid var(--border)}
         <div style="min-width:0"><div class="uname" id="unome">—</div><div class="urole" id="upapel">—</div></div>
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-sm btn-ghost" onclick="tema()" style="flex:1">◐</button>
+        <button class="btn btn-sm btn-ghost" onclick="tema()" style="flex:1" title="Tema claro/escuro">◐</button>
+        <button class="btn btn-sm btn-ghost" onclick="densidade()" style="flex:1" id="bDens" title="Blocos compactos">▤</button>
         <button class="btn btn-sm btn-ghost" onclick="sair()" style="flex:2">Sair</button>
       </div>
     </div>
@@ -343,7 +364,7 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
          setPersistence, browserLocalPersistence }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, onSnapshot, doc, getDoc, addDoc, updateDoc,
-         deleteDoc, query, orderBy, limit }
+         deleteDoc, query, where, orderBy, limit }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const cfg={ apiKey:"AIzaSyCH_t074MvkJn-qVMvCtLfEMaQHf_e_d7M",
@@ -384,6 +405,18 @@ window.tema=function(){ var a=document.documentElement.getAttribute('data-theme'
   document.documentElement.setAttribute('data-theme',a);
   try{ localStorage.setItem('mc_gestao_theme',a); }catch(e){} };
 window.sair=function(){ signOut(auth).catch(function(e){ console.error(e); }); };
+
+var compacto=false;
+function aplicaDensidade(){
+  document.querySelector('main').classList.toggle('compacto', compacto);
+  var b=document.getElementById('bDens');
+  if(b){ b.style.color = compacto?'var(--side-active-text)':''; b.style.borderColor = compacto?'var(--primary)':''; }
+}
+window.densidade=function(){
+  compacto=!compacto;
+  try{ localStorage.setItem('mc_aut_compacto', compacto?'1':'0'); }catch(e){}
+  aplicaDensidade();
+};
 
 /* ---- modal ---- */
 function modal(o){
@@ -451,6 +484,35 @@ function modeloDoTipo(id){
   return modeloDeTipo(tipos.filter(function(x){ return x.firestoreId===id; })[0]);
 }
 
+/* Fornecedores já usados, tirados das próprias autorizações que a pessoa
+   enxerga. Não cria coleção nova nem gasta leitura a mais: reaproveita o que
+   já está carregado. Quem só vê os próprios documentos só relembra os
+   fornecedores que ele mesmo lançou. */
+var FORN={};
+function carregaFornecedores(){
+  FORN={};
+  docs.forEach(function(d){
+    var f=d.fornecedor;
+    if(!f || !f.razao) return;
+    var k=String(f.razao).trim().toUpperCase();
+    var atual=FORN[k];
+    if(!atual || String(d.criadoEm||'') > String(atual._em||'')){
+      FORN[k]={ razao:f.razao, cnpj:f.cnpj, endereco:f.endereco,
+                municipio:f.municipio, pagamento:f.pagamento, _em:d.criadoEm };
+    }
+  });
+  return Object.keys(FORN).sort();
+}
+window.autoFornecedor=function(){
+  var el=document.getElementById('f-razao'); if(!el) return;
+  var f=FORN[String(el.value||'').trim().toUpperCase()];
+  if(!f) return;
+  function põe(id,v){ var e=document.getElementById(id); if(e) e.value=v||''; }
+  põe('f-cnpj',f.cnpj); põe('f-end',f.endereco);
+  põe('f-mun',f.municipio); põe('f-pag',f.pagamento);
+  /* data de entrega não se repete: é de cada pedido */
+};
+
 function linhaItem(){
   return '<tr>'
    + '<td><input type="text" class="it-nome" placeholder="descrição do produto"></td>'
@@ -501,6 +563,8 @@ window.abrirNovo=function(){
     return '<option value="'+esc(t.firestoreId)+'">'+esc(t.nome)+'</option>'; }).join('');
   var itens='';
   for(var i=0;i<5;i++) itens+=linhaItem();
+  var listaForn=carregaFornecedores().map(function(k){
+    return '<option value="'+esc(FORN[k].razao)+'">'; }).join('');
 
   modal({
     titulo:'Nova solicitação', wide:true,
@@ -514,7 +578,9 @@ window.abrirNovo=function(){
        + '<div id="box-compra" style="display:none">'
        +   '<div class="alert a-info" style="margin-bottom:12px">Dados do fornecedor — saem na folha impressa.</div>'
        +   '<div class="grid2">'
-       +     '<div class="fld"><label>Razão social</label><input type="text" id="f-razao"></div>'
+       +     '<div class="fld"><label>Razão social</label>'
+       +       '<input type="text" id="f-razao" list="forn-lista" autocomplete="off" oninput="autoFornecedor()">'
+       +       '<datalist id="forn-lista">'+listaForn+'</datalist></div>'
        +     '<div class="fld"><label>CNPJ</label><input type="text" id="f-cnpj"></div>'
        +     '<div class="fld"><label>Endereço</label><input type="text" id="f-end"></div>'
        +     '<div class="fld"><label>Município / UF</label><input type="text" id="f-mun"></div>'
@@ -591,6 +657,85 @@ window.trocarModelo=function(){
   if(lb) lb.textContent = compra ? 'Observação (sai no rodapé da folha)' : 'Descrição / justificativa';
 };
 window.mostrarValor=window.trocarModelo;   /* nome antigo, mantido */
+
+/* ---- detalhes ----
+   A diretoria assina olhando esta tela: no modelo de compra o cartão da lista
+   mostra só o resumo, e ninguém deve autorizar valor sem ver de quem se está
+   comprando e a que preço unitário. */
+function campo(rotulo, valor){
+  return '<div><span>'+esc(rotulo)+'</span><b>'+(valor?esc(valor):'—')+'</b></div>';
+}
+
+window.detalhes=function(id){
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d) return;
+  var st=d.status||'pendente';
+  var f=d.fornecedor||{}, itens=d.itens||[];
+  var compra=(d.modelo==='compra');
+
+  var b='<div class="det">'
+    + campo('Status', st)
+    + campo('Tipo', d.tipo)
+    + campo('Setor', d.setor)
+    + campo(compra?'Comprador':'Solicitante', d.criadoNome||d.criadoPor)
+    + campo('Criado em', dataBR(d.criadoEm))
+    + (d.prazo?campo('Precisa até', dataBR(d.prazo)):'')
+    + '</div>';
+
+  if(compra){
+    b+='<div class="det-sec">Dados do fornecedor</div><div class="det">'
+      + campo('Razão social', f.razao)
+      + campo('CNPJ', f.cnpj)
+      + campo('Endereço', f.endereco)
+      + campo('Município / UF', f.municipio)
+      + campo('Forma de pagamento', f.pagamento)
+      + campo('Data de entrega', f.entrega)
+      + '</div>';
+
+    var total=0;
+    var linhas=itens.map(function(it,i){
+      var tot=num(it.qtd)*num(it.precoUn); total+=tot;
+      return '<tr><td class="r" style="color:var(--muted);width:30px">'+(i+1)+'</td>'
+       + '<td>'+esc(it.nome||'')+(it.codigo?' <span style="color:var(--muted)">(cód '+esc(it.codigo)+')</span>':'')+'</td>'
+       + '<td class="r mono">'+fmtN(num(it.qtd),0)+'</td>'
+       + '<td class="r mono">'+(num(it.precoUn)>0?fmtN(num(it.precoUn),2):'—')+'</td>'
+       + '<td class="r mono">'+(tot>0?fmtN(tot,2):'—')+'</td></tr>';
+    }).join('');
+
+    b+='<div class="det-sec">Itens</div>'
+      + '<div class="tw" style="border-radius:10px"><table style="font-size:13px"><thead><tr>'
+      +   '<th></th><th>Descrição</th><th class="r">Qtde</th><th class="r">Unit.</th><th class="r">Total</th>'
+      + '</tr></thead><tbody>'+(linhas||'<tr><td colspan="5" class="empty">Sem itens</td></tr>')+'</tbody></table></div>'
+      + '<div class="it-soma" style="margin:10px 0 13px">Valor total: <b>'+fmtR$(total)+'</b></div>';
+  }else if(num(d.valor)>0){
+    b+='<div class="it-soma" style="margin:0 0 13px">Valor: <b>'+fmtR$(d.valor)+'</b></div>';
+  }
+
+  if(d.descricao){
+    b+='<div class="det-sec">'+(compra?'Observação':'Descrição / justificativa')+'</div>'
+      + '<div class="det-txt">'+esc(d.descricao)+'</div>';
+  }
+
+  if(st==='aprovado'){
+    b+='<div class="alert a-ok">✓ Assinado por '+esc(d.aprovadoPor||'')+' em '
+      + esc(dataBR(d.aprovadoEm))+' às '+esc(horaBR(d.aprovadoEm))
+      + ' · código <b>'+esc(d.codigo||'')+'</b></div>';
+    if(d.obsAprovacao) b+='<div class="det-txt">Diretoria: '+esc(d.obsAprovacao)+'</div>';
+  }
+  if(st==='recusado') b+='<div class="doc-rec">Recusado: '+esc(d.motivoRecusa||'')+'</div>';
+
+  var extra='';
+  if(st==='pendente' && podeAprovar){
+    extra='<button class="btn btn-sm" style="margin-right:auto" onclick="assinar(\''+esc(id)+'\')">Assinar</button>'
+        + '<button class="btn btn-sm btn-ghost" onclick="recusar(\''+esc(id)+'\')">Recusar</button>';
+  }else if(st==='aprovado'){
+    extra='<button class="btn btn-sm btn-ghost" style="margin-right:auto" onclick="imprimir(\''+esc(id)+'\')">⎙ Imprimir / PDF</button>';
+  }
+
+  modal({ titulo:esc(d.titulo||'—'), wide:true,
+          sub:esc(d.tipo||'')+' · '+esc(d.setor||''),
+          body:b, extra:extra });
+};
 
 /* ---- assinar ---- */
 window.assinar=function(id){
@@ -836,8 +981,22 @@ function cartao(d, comAcoes){
   }
   if(st==='aprovado')
     h+='<button class="btn btn-sm btn-ghost" onclick="imprimir(\'' + esc(d.firestoreId) + '\')">⎙ Imprimir / PDF</button>';
+  h+='<button class="btn btn-sm btn-ghost" onclick="detalhes(\''+esc(d.firestoreId)+'\')">Ver detalhes</button>';
   h+='</div></div>';
   return h;
+}
+
+/* Solicitante enxerga os últimos 90 dias. É conveniência de tela, para a
+   lista não virar arquivo morto — a restrição que vale é a da consulta. */
+var LIMITE_DIAS=90;
+function dentroDaJanela(d){
+  if(ehAdmin || ehFinanceiro) return true;
+  var t=_dt(d.criadoEm);
+  if(!t) return true;
+  return (Date.now()-t.getTime()) <= LIMITE_DIAS*86400000;
+}
+function aviso(){
+  return erroLista ? '<div class="alert a-warn">▲ '+esc(erroLista)+'</div>' : '';
 }
 
 function render(){
@@ -848,15 +1007,18 @@ function render(){
 
   if(pagina==='meus'){
     var f=(document.getElementById('f-meus')||{}).value||'';
-    var l=docs.filter(function(d){ return d.criadoPor===sessaoEmail && (!f || (d.status||'pendente')===f); });
-    document.getElementById('s-meus').innerHTML = l.length
+    var l=docs.filter(function(d){ return d.criadoPor===sessaoEmail
+             && dentroDaJanela(d) && (!f || (d.status||'pendente')===f); });
+    var nota=(ehAdmin||ehFinanceiro) ? ''
+      : '<div class="doc-meta" style="margin-bottom:10px">Mostrando os últimos '+LIMITE_DIAS+' dias.</div>';
+    document.getElementById('s-meus').innerHTML = aviso() + nota + (l.length
       ? l.map(function(d){ return cartao(d,false); }).join('')
-      : '<div class="card empty">Nenhuma solicitação sua ainda.</div>';
+      : '<div class="card empty">Nenhuma solicitação sua nos últimos '+LIMITE_DIAS+' dias.</div>');
   }
 
   if(pagina==='fila'){
     var p=docs.filter(function(d){ return (d.status||'pendente')==='pendente'; });
-    document.getElementById('s-fila').innerHTML =
+    document.getElementById('s-fila').innerHTML = aviso() +
       '<div class="kpis"><div class="card"><div class="klabel">Aguardando você</div>'
       + '<div class="kval" style="color:'+(p.length?'var(--amber)':'var(--green)')+'">'+p.length+'</div>'
       + '<div class="khint">'+(p.length===1?'documento':'documentos')+'</div></div></div>'
@@ -885,7 +1047,7 @@ function render(){
     var somaAp=l.filter(function(d){ return d.status==='aprovado'; })
                 .reduce(function(t,d){ return t+num(d.valor); },0);
 
-    document.getElementById('s-todas').innerHTML =
+    document.getElementById('s-todas').innerHTML = aviso() +
       '<div class="kpis">'
       + '<div class="card"><div class="klabel">Documentos</div><div class="kval">'+l.length+'</div>'
       +   '<div class="khint">no filtro atual</div></div>'
@@ -951,11 +1113,33 @@ document.getElementById('fLogin').addEventListener('submit', async function(ev){
   }finally{ b.disabled=false; b.textContent='Entrar'; }
 });
 
-var assinantes=[];
+var erroLista='';
+
+/* Quem vê o quê.
+   Diretoria e financeiro (Jonathan, Simone) leem a coleção inteira; os demais
+   só leem os próprios documentos — e isso é a CONSULTA, não um filtro de tela.
+   Quem não pode ver não recebe o dado do servidor. A consulta dos solicitantes
+   não usa orderBy de propósito: assim dispensa índice composto e ordenamos aqui. */
 function ouvir(){
-  onSnapshot(query(collection(dbC,'assinaturas'), orderBy('criadoEm','desc'), limit(600)),
-    function(s){ docs=s.docs.map(function(x){ return Object.assign({firestoreId:x.id}, x.data()); }); render(); },
-    function(e){ console.error('assinaturas:',e); });
+  var col=collection(dbC,'assinaturas');
+  var q = (ehAdmin || ehFinanceiro)
+        ? query(col, orderBy('criadoEm','desc'), limit(600))
+        : query(col, where('criadoPor','==',sessaoEmail), limit(400));
+
+  onSnapshot(q,
+    function(s){
+      erroLista='';
+      docs=s.docs.map(function(x){ return Object.assign({firestoreId:x.id}, x.data()); })
+                 .sort(function(a,b){ return String(b.criadoEm||'').localeCompare(String(a.criadoEm||'')); });
+      render();
+    },
+    function(e){
+      console.error('assinaturas:',e);
+      erroLista = (e.code==='permission-denied')
+        ? 'Sem permissão para ler as autorizações. Confira as regras do Firestore.'
+        : ('Não foi possível carregar a lista: '+(e.code||e.message));
+      docs=[]; render();
+    });
   onSnapshot(collection(dbC,'assTipos'),
     function(s){ tipos=s.docs.map(function(x){ return Object.assign({firestoreId:x.id}, x.data()); })
       .sort(function(a,b){ return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR'); }); render(); },
@@ -995,6 +1179,12 @@ onAuthStateChanged(auth, async function(u){
   document.getElementById('uav').textContent=(sessaoNome[0]||'?').toUpperCase();
   document.getElementById('unome').textContent=sessaoNome;
   document.getElementById('upapel').textContent=ehAdmin?'Diretoria':(podeAprovar?'Assina':(ehFinanceiro?'Financeiro':'Solicitante'));
+
+  try{
+    var pref=localStorage.getItem('mc_aut_compacto');
+    compacto = (pref===null) ? (ehAdmin||ehFinanceiro) : (pref==='1');
+  }catch(e){ compacto = (ehAdmin||ehFinanceiro); }
+  aplicaDensidade();
 
   ouvir();
   nav(podeAprovar?'fila':'meus');
