@@ -138,6 +138,14 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .x{background:none;border:none;color:var(--muted);font-size:22px;line-height:1;cursor:pointer}
 .mbody{padding:16px 20px;overflow:auto}
 .mfoot{display:flex;justify-content:flex-end;gap:8px;padding:13px 20px;border-top:1px solid var(--border);flex-wrap:wrap}
+.modal.wide{max-width:780px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:11px}
+.itens{width:100%;border-collapse:collapse;margin-top:4px}
+.itens th{font-size:10px;padding:5px 6px}
+.itens td{padding:3px 4px;border-bottom:1px solid var(--border)}
+.itens input{padding:6px 8px;font-size:13px;border-radius:7px}
+.it-soma{text-align:right;font-size:13.5px}
+.it-soma b{font-family:'JetBrains Mono',monospace;font-size:18px;color:var(--primary)}
 
 /* ---- verificação ---- */
 .ver-cx{max-width:440px}
@@ -192,6 +200,47 @@ td{padding:9px;border-bottom:1px solid var(--border)}
                   font-size:8px; color:#666; display:flex; justify-content:space-between; gap:14px }
   #imp .p-cod{ font-family:'Courier New', monospace; font-size:12px; font-weight:bold; color:#000;
                border:1.5px solid #000; padding:3px 9px; letter-spacing:1.5px }
+
+  /* ---- folha Autorização de Compra (mesmo modelo do app de peças) ---- */
+  #imp .au-cab{ display:flex; justify-content:space-between; align-items:center;
+                border-bottom:2px solid #000; padding-bottom:9px }
+  #imp .au-logo{ height:46px; width:auto; max-width:210px; flex:0 0 auto; object-fit:contain }
+  #imp .au-emp{ text-align:right; font-size:9.5px; line-height:1.55 }
+  #imp .au-tit{ text-align:center; font-size:16px; font-weight:bold; letter-spacing:1.6px;
+                margin:14px 0 12px; padding-bottom:5px; border-bottom:1px solid #000; display:block }
+  #imp .au-meta{ width:100%; margin-bottom:10px; font-size:11px }
+  #imp .au-meta td{ padding:2px 0 }
+  #imp .au-meta td:last-child{ text-align:right }
+  #imp .au-sec{ background:#ddd; border:1px solid #000; padding:4px 7px; font-weight:bold;
+                font-size:11px; letter-spacing:.4px }
+  #imp .au-forn{ width:100%; border:1px solid #000; border-top:none; border-collapse:collapse;
+                 margin-bottom:12px }
+  #imp .au-forn td{ padding:5px 7px; border-bottom:1px solid #bbb; width:50% }
+  #imp .au-itens{ width:100%; border-collapse:collapse; border:1px solid #000 }
+  #imp .au-itens th{ background:#ddd; border:1px solid #000; padding:5px 6px; font-size:10.5px }
+  #imp .au-itens td{ border:1px solid #999; padding:4px 6px; height:17px }
+  #imp .au-itens tfoot td{ border:1px solid #000; background:#f0f0f0; padding:6px }
+  #imp .c{ text-align:center }
+  #imp .r{ text-align:right }
+  #imp .au-obs{ border:1px solid #000; border-top:none; padding:7px; min-height:52px;
+                font-size:10.5px; line-height:1.5; white-space:pre-wrap }
+  #imp .au-ass{ margin-top:40px; display:flex; align-items:flex-end;
+                justify-content:center; gap:44px; flex-wrap:wrap }
+  #imp .au-ass-bloco{ text-align:center; min-width:270px }
+  #imp .au-ass-firma{ font-family:'Mrs Saint Delafield', cursive; font-size:44px;
+                      line-height:.95; color:#14213d; white-space:nowrap; padding:0 12px }
+  #imp .au-ass-linha{ border-top:1.2px solid #000; margin:0 0 6px }
+  #imp .au-ass-nome{ font-size:11.5px; font-weight:bold }
+  #imp .au-ass-cargo{ font-size:9.5px; letter-spacing:.6px; text-transform:uppercase; color:#444 }
+  #imp .au-ass-cnpj{ font-size:8px; color:#777; margin-top:4px }
+  #imp .au-carimbo{ border:2px solid #1f6b45; color:#1f6b45; border-radius:5px;
+                    padding:7px 14px; transform:rotate(-6deg); text-align:center; flex:0 0 auto }
+  #imp .au-carimbo b{ display:block; font-size:13px; font-weight:bold; letter-spacing:.13em }
+  #imp .au-carimbo span{ display:block; font-size:8px; letter-spacing:.08em; margin-top:2px }
+  #imp .au-rastro{ flex:1 1 100%; text-align:center; font-size:7.5px; color:#888; margin-top:14px }
+  #imp .au-rastro b{ font-family:'Courier New', monospace; font-size:10px; color:#000;
+                     border:1.2px solid #000; padding:1px 6px; letter-spacing:1.2px }
+  #imp tr{ page-break-inside:avoid }
 }
 </style>
 </head>
@@ -329,6 +378,7 @@ function dataBR(iso){ if(!iso) return '—'; var d=_dt(iso);
   return _z(d.getDate())+'/'+_z(d.getMonth()+1)+'/'+d.getFullYear(); }
 function horaBR(iso){ var d=_dt(iso); return d?_z(d.getHours())+':'+_z(d.getMinutes()):''; }
 function fmtR$(v){ return 'R$ '+num(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtN(v,d){ return num(v).toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d}); }
 
 window.tema=function(){ var a=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';
   document.documentElement.setAttribute('data-theme',a);
@@ -338,7 +388,7 @@ window.sair=function(){ signOut(auth).catch(function(e){ console.error(e); }); }
 /* ---- modal ---- */
 function modal(o){
   var h=document.getElementById('modal-host');
-  h.innerHTML='<div class="mask" id="mask"><div class="modal">'
+  h.innerHTML='<div class="mask" id="mask"><div class="modal'+(o.wide?' wide':'')+'">'
     +'<div class="mhead"><div><div class="mtitle">'+o.titulo+'</div>'
     +(o.sub?'<div class="msub">'+o.sub+'</div>':'')+'</div>'
     +'<button class="x" onclick="fecharModal()">×</button></div>'
@@ -383,6 +433,57 @@ function novoCodigo(){
 }
 
 /* ---- solicitação ---- */
+/* Modelo do documento.
+   'simples' = título, valor e descrição — o que já existia.
+   'compra'  = folha de Autorização de Compra: fornecedor, itens e total,
+               igual à do app de peças. O total nasce da soma das linhas e não
+               é digitado, assim o que sai impresso sempre fecha com os itens. */
+function modeloDoTipo(id){
+  var t=tipos.filter(function(x){ return x.firestoreId===id; })[0];
+  return (t && t.modelo==='compra') ? 'compra' : 'simples';
+}
+
+function linhaItem(){
+  return '<tr>'
+   + '<td><input type="text" class="it-nome" placeholder="descrição do produto"></td>'
+   + '<td style="width:86px"><input type="text" class="it-cod" placeholder="cód"></td>'
+   + '<td style="width:76px"><input type="number" class="it-qtd" step="1" min="0" oninput="somaItens()"></td>'
+   + '<td style="width:104px"><input type="number" class="it-un" step="0.01" min="0" placeholder="0,00" oninput="somaItens()"></td>'
+   + '<td class="r it-tot mono" style="width:104px;color:var(--muted);font-size:12.5px">—</td>'
+   + '</tr>';
+}
+window.addLinha=function(){
+  var tb=document.getElementById('it-body'); if(!tb) return;
+  if(tb.rows.length>=14){ alert('Máximo de 14 itens — acima disso o documento passa de uma folha.'); return; }
+  tb.insertAdjacentHTML('beforeend', linhaItem());
+};
+window.somaItens=function(){
+  var tb=document.getElementById('it-body'); if(!tb) return 0;
+  var soma=0;
+  Array.prototype.forEach.call(tb.rows, function(tr){
+    var q=num(tr.querySelector('.it-qtd').value), pr=num(tr.querySelector('.it-un').value);
+    var cel=tr.querySelector('.it-tot');
+    if(q>0 && pr>0){ soma+=q*pr; cel.textContent=fmtR$(q*pr); cel.style.color='var(--text)'; }
+    else { cel.textContent='—'; cel.style.color='var(--muted)'; }
+  });
+  var el=document.getElementById('it-soma');
+  if(el) el.textContent = soma>0 ? fmtR$(soma) : '—';
+  return soma;
+};
+function lerItens(){
+  var tb=document.getElementById('it-body'), out=[];
+  if(!tb) return out;
+  Array.prototype.forEach.call(tb.rows, function(tr){
+    var nome=String(tr.querySelector('.it-nome').value||'').trim();
+    var q=num(tr.querySelector('.it-qtd').value);
+    if(!nome && !(q>0)) return;            /* linha em branco: ignora */
+    out.push({ nome:nome,
+               codigo:String(tr.querySelector('.it-cod').value||'').trim(),
+               qtd:q, precoUn:num(tr.querySelector('.it-un').value) });
+  });
+  return out;
+}
+
 window.abrirNovo=function(){
   if(!tipos.length){
     alert('Nenhum tipo de documento cadastrado ainda. Peça à diretoria para criar em Tipos.');
@@ -390,41 +491,98 @@ window.abrirNovo=function(){
   }
   var opt=tipos.map(function(t){
     return '<option value="'+esc(t.firestoreId)+'">'+esc(t.nome)+'</option>'; }).join('');
+  var itens='';
+  for(var i=0;i<5;i++) itens+=linhaItem();
+
   modal({
-    titulo:'Nova solicitação',
+    titulo:'Nova solicitação', wide:true,
     sub:'Vai para a diretoria assinar',
-    body:'<div class="fld"><label>Tipo de documento</label><select id="n-tipo" onchange="mostrarValor()">'+opt+'</select></div>'
-       + '<div class="fld"><label>Setor</label><input type="text" id="n-setor" value="'+esc(meuSetor)+'" placeholder="RH, Comercial, Produção…"></div>'
+    body:'<div class="grid2">'
+       +   '<div class="fld"><label>Tipo de documento</label><select id="n-tipo" onchange="trocarModelo()">'+opt+'</select></div>'
+       +   '<div class="fld"><label>Setor</label><input type="text" id="n-setor" value="'+esc(meuSetor)+'" placeholder="RH, Comercial, Produção…"></div>'
+       + '</div>'
        + '<div class="fld"><label>Título</label><input type="text" id="n-tit" maxlength="90" placeholder="resumo em uma linha"></div>'
        + '<div class="fld" id="box-valor"><label>Valor (R$)</label><input type="number" id="n-val" step="0.01" min="0" placeholder="0,00"></div>'
-       + '<div class="fld"><label>Descrição / justificativa</label><textarea id="n-desc" placeholder="o que é, por que precisa, para quem…"></textarea></div>'
+       + '<div id="box-compra" style="display:none">'
+       +   '<div class="alert a-info" style="margin-bottom:12px">Dados do fornecedor — saem na folha impressa.</div>'
+       +   '<div class="grid2">'
+       +     '<div class="fld"><label>Razão social</label><input type="text" id="f-razao"></div>'
+       +     '<div class="fld"><label>CNPJ</label><input type="text" id="f-cnpj"></div>'
+       +     '<div class="fld"><label>Endereço</label><input type="text" id="f-end"></div>'
+       +     '<div class="fld"><label>Município / UF</label><input type="text" id="f-mun"></div>'
+       +     '<div class="fld"><label>Forma de pagamento</label><input type="text" id="f-pag" placeholder="30 dias, à vista…"></div>'
+       +     '<div class="fld"><label>Data de entrega</label><input type="text" id="f-ent" placeholder="dd/mm/aaaa ou prazo"></div>'
+       +   '</div>'
+       +   '<label>Itens</label>'
+       +   '<div class="tw" style="border-radius:10px"><table class="itens"><thead><tr>'
+       +     '<th>Descrição do produto</th><th>Cód.</th><th>Qtde</th><th>Unit. (R$)</th><th class="r">Total</th>'
+       +   '</tr></thead><tbody id="it-body">'+itens+'</tbody></table></div>'
+       +   '<div style="display:flex;align-items:center;gap:10px;margin-top:9px">'
+       +     '<button type="button" class="btn btn-sm btn-ghost" onclick="addLinha()">+ linha</button>'
+       +     '<div class="it-soma" style="flex:1">Valor total: <b id="it-soma">—</b></div>'
+       +   '</div>'
+       + '</div>'
+       + '<div class="fld" style="margin-top:13px"><label id="lb-desc">Descrição / justificativa</label>'
+       +   '<textarea id="n-desc" placeholder="o que é, por que precisa, para quem…"></textarea></div>'
        + '<div class="fld"><label>Precisa até</label><input type="date" id="n-prazo"></div>',
     ok:'Enviar para assinatura',
     onOk:function(){
-      var t=tipos.filter(function(x){ return x.firestoreId===document.getElementById('n-tipo').value; })[0];
+      var tipoId=document.getElementById('n-tipo').value;
+      var t=tipos.filter(function(x){ return x.firestoreId===tipoId; })[0];
+      var modelo=modeloDoTipo(tipoId);
       var tit=String(document.getElementById('n-tit').value||'').trim();
       var setor=String(document.getElementById('n-setor').value||'').trim();
       var desc=String(document.getElementById('n-desc').value||'').trim();
-      var val=num(document.getElementById('n-val').value);
+
       if(!tit){ alert('Informe o título.'); return false; }
       if(!setor){ alert('Informe o setor.'); return false; }
-      if(!desc){ alert('Descreva a solicitação — é o que a diretoria lê para decidir.'); return false; }
-      if(t && t.exigeValor && !(val>0)){ alert('Este tipo de documento exige o valor.'); return false; }
-      addDoc(collection(dbC,'assinaturas'), {
-        tipo:(t?t.nome:''), tipoId:(t?t.firestoreId:''),
-        setor:setor, titulo:tit, descricao:desc, valor:val,
+
+      var dados={ tipo:(t?t.nome:''), tipoId:tipoId, modelo:modelo,
+        setor:setor, titulo:tit, descricao:desc,
         prazo:String(document.getElementById('n-prazo').value||''),
-        status:'pendente', criadoPor:sessaoEmail, criadoNome:sessaoNome, criadoEm:agora()
-      }).catch(function(e){ console.error('novo:',e); alert('Não foi possível enviar: '+(e.code||e.message)); });
+        status:'pendente', criadoPor:sessaoEmail, criadoNome:sessaoNome, criadoEm:agora() };
+
+      if(modelo==='compra'){
+        var lista=lerItens();
+        var razao=String(document.getElementById('f-razao').value||'').trim();
+        if(!razao){ alert('Informe a razão social do fornecedor.'); return false; }
+        if(!lista.length){ alert('Lance ao menos um item.'); return false; }
+        dados.fornecedor={
+          razao:razao,
+          cnpj:String(document.getElementById('f-cnpj').value||'').trim(),
+          endereco:String(document.getElementById('f-end').value||'').trim(),
+          municipio:String(document.getElementById('f-mun').value||'').trim(),
+          pagamento:String(document.getElementById('f-pag').value||'').trim(),
+          entrega:String(document.getElementById('f-ent').value||'').trim()
+        };
+        dados.itens=lista;
+        dados.valor=lista.reduce(function(a,x){ return a+num(x.qtd)*num(x.precoUn); },0);
+      }else{
+        var val=num(document.getElementById('n-val').value);
+        if(t && t.exigeValor && !(val>0)){ alert('Este tipo de documento exige o valor.'); return false; }
+        if(!desc){ alert('Descreva a solicitação — é o que a diretoria lê para decidir.'); return false; }
+        dados.valor=val;
+      }
+
+      addDoc(collection(dbC,'assinaturas'), dados)
+        .catch(function(e){ console.error('novo:',e); alert('Não foi possível enviar: '+(e.code||e.message)); });
     }
   });
-  setTimeout(mostrarValor,30);
+  setTimeout(trocarModelo,30);
 };
-window.mostrarValor=function(){
-  var t=tipos.filter(function(x){ return x.firestoreId===(document.getElementById('n-tipo')||{}).value; })[0];
-  var b=document.getElementById('box-valor');
-  if(b) b.style.display=(t && t.exigeValor===false)?'none':'';
+
+window.trocarModelo=function(){
+  var sel=document.getElementById('n-tipo'); if(!sel) return;
+  var tipoId=sel.value;
+  var compra=(modeloDoTipo(tipoId)==='compra');
+  var t=tipos.filter(function(x){ return x.firestoreId===tipoId; })[0];
+  var bv=document.getElementById('box-valor'), bc=document.getElementById('box-compra');
+  if(bc) bc.style.display = compra?'':'none';
+  if(bv) bv.style.display = (compra || (t && t.exigeValor===false)) ? 'none' : '';
+  var lb=document.getElementById('lb-desc');
+  if(lb) lb.textContent = compra ? 'Observação (sai no rodapé da folha)' : 'Descrição / justificativa';
 };
+window.mostrarValor=window.trocarModelo;   /* nome antigo, mantido */
 
 /* ---- assinar ---- */
 window.assinar=function(id){
@@ -473,14 +631,74 @@ window.recusar=function(id){
 };
 
 /* ---- impressão ---- */
-window.imprimir=function(id){
-  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
-  if(!d) return;
-  if(d.status!=='aprovado'){ alert('Só documento assinado pode ser impresso.'); return; }
+/* O carimbo puxa data, hora e quem assinou do próprio sistema — é isso que
+   dá rastro ao documento, mais do que o desenho da assinatura. O código de
+   verificação sai junto, para conferência em Verificar código. */
+function blocoAssinatura(d){
   var dia=dataBR(d.aprovadoEm), hora=horaBR(d.aprovadoEm);
+  return '<div class="au-ass">'
+    + '<div class="au-ass-bloco">'
+    +   '<div class="au-ass-firma">João Thomé</div>'
+    +   '<div class="au-ass-linha"></div>'
+    +   '<div class="au-ass-nome">João Thomé</div>'
+    +   '<div class="au-ass-cargo">Diretor Geral</div>'
+    +   '<div class="au-ass-cnpj">Panificadora Monte Castelo Ltda · CNPJ 01.052.266/0001-40</div>'
+    + '</div>'
+    + '<div class="au-carimbo"><b>AUTORIZADO</b>'
+    +   '<span>'+esc(dia)+(hora?' · '+esc(hora):'')+'</span></div>'
+    + '<div class="au-rastro">Assinado no sistema por '+esc(d.aprovadoPor||'')
+    +   ' em '+esc(dia)+(hora?' às '+esc(hora):'')
+    +   ' &nbsp;·&nbsp; confira pelo código <b>'+esc(d.codigo||'')+'</b></div>'
+    + '</div>';
+}
 
-  document.getElementById('imp').innerHTML=
-      '<div class="p-cab"><img class="p-logo" src="'+LOGO_MC+'" alt="Monte Castelo">'
+/* Folha de Autorização de Compra — mesmo documento do app de peças. */
+function folhaCompra(d){
+  var f=d.fornecedor||{}, itens=d.itens||[];
+  var total=itens.reduce(function(t,x){ return t+num(x.precoUn)*num(x.qtd); },0);
+
+  var linhas=itens.map(function(it,i){
+    var tot=num(it.precoUn)*num(it.qtd);
+    return '<tr><td class="c">'+(i+1)+'</td><td class="c">'+fmtN(num(it.qtd),0)+'</td>'
+      + '<td>'+esc(it.nome||'')+(it.codigo?' (cód '+esc(it.codigo)+')':'')+'</td>'
+      + '<td class="r">'+(num(it.precoUn)>0?fmtN(num(it.precoUn),2):'—')+'</td>'
+      + '<td class="r">'+(tot>0?fmtN(tot,2):'—')+'</td></tr>';
+  }).join('');
+  var vazias='';   /* linhas em branco para a folha manter o corpo do modelo */
+  for(var k=itens.length;k<12;k++) vazias+='<tr><td class="c">&nbsp;</td><td></td><td></td><td></td><td></td></tr>';
+
+  return '<div class="au-cab">'
+    +   '<img class="au-logo" src="'+LOGO_MC+'" alt="Monte Castelo">'
+    +   '<div class="au-emp"><b>PANIFICADORA MONTE CASTELO LTDA</b><br>'
+    +     'AV RODRIGUES DA FONSECA 1840<br>VILA NOVA - PORTO ALEGRE<br>'
+    +     'CNPJ 01.052.266/0001-40</div>'
+    + '</div>'
+    + '<div class="au-tit">'+esc(String(d.tipo||'AUTORIZAÇÃO DE COMPRA').toUpperCase())+'</div>'
+    + '<table class="au-meta"><tr>'
+    +   '<td><b>Data do Pedido:</b> '+esc(dataBR(d.criadoEm))+'</td>'
+    +   '<td><b>Comprador:</b> '+esc(d.criadoNome||d.criadoPor||'')+'</td>'
+    + '</tr></table>'
+    + '<div class="au-sec">DADOS DO FORNECEDOR</div>'
+    + '<table class="au-forn">'
+    +   '<tr><td><b>Razão Social:</b> '+esc(f.razao||'')+'</td><td><b>CNPJ:</b> '+esc(f.cnpj||'')+'</td></tr>'
+    +   '<tr><td><b>Endereço:</b> '+esc(f.endereco||'')+'</td><td><b>MUN. / UF:</b> '+esc(f.municipio||'')+'</td></tr>'
+    +   '<tr><td><b>Forma Pagamento:</b> '+esc(f.pagamento||'')+'</td><td><b>Data Entrega:</b> '+esc(f.entrega||'')+'</td></tr>'
+    + '</table>'
+    + '<table class="au-itens"><thead><tr>'
+    +   '<th style="width:8%">ITEM</th><th style="width:10%">QTDE</th>'
+    +   '<th>DESCRIÇÃO DO PRODUTO</th><th style="width:15%">UNIT (R$)</th><th style="width:15%">TOTAL (R$)</th>'
+    + '</tr></thead><tbody>'+linhas+vazias+'</tbody>'
+    + '<tfoot><tr><td colspan="4" class="r"><b>VALOR TOTAL:</b></td>'
+    +   '<td class="r"><b>'+(total>0?fmtN(total,2):'—')+'</b></td></tr></tfoot></table>'
+    + '<div class="au-obs"><b>OBSERVAÇÃO:</b><br>'+esc(d.descricao||'')
+    +   (d.obsAprovacao?'\n\nDiretoria: '+esc(d.obsAprovacao):'')+'</div>'
+    + blocoAssinatura(d);
+}
+
+/* Folha simples — título, valor e descrição. */
+function folhaSimples(d){
+  var dia=dataBR(d.aprovadoEm), hora=horaBR(d.aprovadoEm);
+  return '<div class="p-cab"><img class="p-logo" src="'+LOGO_MC+'" alt="Monte Castelo">'
     +   '<div class="p-emp"><b>PANIFICADORA MONTE CASTELO LTDA</b><br>'
     +     'AV RODRIGUES DA FONSECA 1840<br>VILA NOVA - PORTO ALEGRE<br>'
     +     'CNPJ 01.052.266/0001-40</div></div>'
@@ -504,6 +722,17 @@ window.imprimir=function(id){
     +   'Assinado por '+esc(d.aprovadoPor||'')+' em '+esc(dia)+(hora?' às '+esc(hora):'')+'.<br>'
     +   'Confira a autenticidade pelo código ao lado, no app de Autorizações.</div>'
     +   '<div class="p-cod">'+esc(d.codigo||'')+'</div></div>';
+}
+
+/* Um botão só: a caixa de impressão do navegador traz "Salvar como PDF"
+   em Destino — é por ali que sai o PDF, sem plugin nenhum. */
+window.imprimir=function(id){
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d) return;
+  if(d.status!=='aprovado'){ alert('Só documento assinado pode ser impresso.'); return; }
+
+  document.getElementById('imp').innerHTML =
+    (d.modelo==='compra') ? folhaCompra(d) : folhaSimples(d);
 
   window.scrollTo(0,0);
   setTimeout(function(){ window.print(); },140);
@@ -540,14 +769,20 @@ window.abrirTipo=function(id){
     titulo:novo?'Novo tipo':esc(t.nome||''),
     body:'<div class="fld"><label>Nome do tipo</label>'
        + '<input type="text" id="t-nome" value="'+esc(t.nome||'')+'" placeholder="Autorização de hora extra"></div>'
+       + '<div class="fld"><label>Modelo da folha impressa</label><select id="t-mod">'
+       +   '<option value="simples"'+(t.modelo==='compra'?'':' selected')+'>Simples — título, valor e descrição</option>'
+       +   '<option value="compra"'+(t.modelo==='compra'?' selected':'')+'>Autorização de Compra — fornecedor, itens e total</option>'
+       + '</select></div>'
        + '<div class="fld"><label style="display:flex;align-items:center;gap:8px;font-weight:400;color:var(--text)">'
-       + '<input type="checkbox" id="t-val" style="width:auto" '+(t.exigeValor===false?'':'checked')+'> Exige valor em reais</label></div>',
+       + '<input type="checkbox" id="t-val" style="width:auto" '+(t.exigeValor===false?'':'checked')+'> Exige valor em reais</label></div>'
+       + '<div class="alert a-info" style="font-size:12px">No modelo de compra o valor total vem da soma dos itens — não se digita.</div>',
     ok:'Salvar',
     extra:(novo?'':'<button class="btn btn-sm btn-ghost" style="margin-right:auto" onclick="apagarTipo(\'' + esc(id) + '\')">Excluir</button>'),
     onOk:function(){
       var n=String(document.getElementById('t-nome').value||'').trim();
       if(!n){ alert('Informe o nome do tipo.'); return false; }
-      var dados={ nome:n, exigeValor:document.getElementById('t-val').checked };
+      var dados={ nome:n, exigeValor:document.getElementById('t-val').checked,
+                  modelo:document.getElementById('t-mod').value };
       var pr=novo?addDoc(collection(dbC,'assTipos'),dados):updateDoc(doc(dbC,'assTipos',id),dados);
       pr.catch(function(e){ console.error('tipo:',e); alert('Não foi possível salvar: '+(e.code||e.message)); });
     }
@@ -572,7 +807,13 @@ function cartao(d, comAcoes){
    +   '<span class="tag">'+esc(d.criadoNome||d.criadoPor||'')+'</span>'
    +   (d.prazo?'<span class="tag">até '+esc(dataBR(d.prazo))+'</span>':'')+'</div>';
   if(num(d.valor)>0) h+='<div class="doc-val">'+fmtR$(d.valor)+'</div>';
-  h+='<div class="doc-desc">'+esc(d.descricao||'')+'</div>';
+  if(d.modelo==='compra'){
+    var f=d.fornecedor||{}, ni=(d.itens||[]).length;
+    h+='<div class="doc-meta" style="margin-bottom:6px">'+esc(f.razao||'—')
+     + ' · '+ni+(ni===1?' item':' itens')
+     + (f.pagamento?' · '+esc(f.pagamento):'')+'</div>';
+  }
+  if(d.descricao) h+='<div class="doc-desc">'+esc(d.descricao||'')+'</div>';
   if(st==='aprovado'){
     h+='<div><span class="doc-cod">'+esc(d.codigo||'')+'</span> '
      + '<span class="doc-meta">assinado em '+esc(dataBR(d.aprovadoEm))+' às '+esc(horaBR(d.aprovadoEm))+'</span></div>';
@@ -585,7 +826,7 @@ function cartao(d, comAcoes){
      + '<button class="btn btn-sm btn-ghost" onclick="recusar(\'' + esc(d.firestoreId) + '\')">Recusar</button>';
   }
   if(st==='aprovado')
-    h+='<button class="btn btn-sm btn-ghost" onclick="imprimir(\'' + esc(d.firestoreId) + '\')">⎙ Imprimir</button>';
+    h+='<button class="btn btn-sm btn-ghost" onclick="imprimir(\'' + esc(d.firestoreId) + '\')">⎙ Imprimir / PDF</button>';
   h+='</div></div>';
   return h;
 }
@@ -651,10 +892,11 @@ function render(){
 
   if(pagina==='tipos'){
     document.getElementById('s-tipos').innerHTML = tipos.length
-      ? '<div class="tw"><table><thead><tr><th>Tipo</th><th>Valor</th><th class="r"></th></tr></thead><tbody>'
+      ? '<div class="tw"><table><thead><tr><th>Tipo</th><th>Modelo</th><th class="r"></th></tr></thead><tbody>'
         + tipos.map(function(t){
             return '<tr><td><b>'+esc(t.nome)+'</b></td>'
-              + '<td style="color:var(--muted)">'+(t.exigeValor===false?'não exige':'exige valor')+'</td>'
+              + '<td style="color:var(--muted)">'+(t.modelo==='compra'?'Autorização de Compra'
+                  :(t.exigeValor===false?'simples · sem valor':'simples · com valor'))+'</td>'
               + '<td class="r"><button class="btn btn-sm btn-ghost" onclick="abrirTipo(\'' + esc(t.firestoreId) + '\')">Editar</button></td></tr>';
           }).join('') + '</tbody></table></div>'
       : '<div class="card empty">Nenhum tipo cadastrado. Crie o primeiro para os setores poderem solicitar.</div>';
