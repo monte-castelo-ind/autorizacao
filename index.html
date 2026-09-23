@@ -398,6 +398,7 @@ html[data-pal="vinho"][data-theme="light"]{
       <div style="display:flex;gap:6px">
         <button class="btn btn-sm btn-ghost" onclick="tema()" style="flex:1" title="Tema claro/escuro">◐</button>
         <button class="btn btn-sm btn-ghost" onclick="densidade()" style="flex:1" id="bDens" title="Blocos compactos">▤</button>
+        <button class="btn btn-sm btn-ghost" onclick="som()" style="flex:1" id="bSom" title="Aviso sonoro">♪</button>
         <button class="btn btn-sm btn-ghost" onclick="sair()" style="flex:2">Sair</button>
       </div>
     </div>
@@ -524,6 +525,78 @@ document.addEventListener('DOMContentLoaded', function(){
     b.classList.toggle('on', (b.getAttribute('data-pal')||'')===pal);
   });
 });
+
+/* ===== aviso de documento novo =====
+   Som sintetizado na hora, para o app seguir sendo um arquivo só — sem mp3
+   para hospedar. Duas notas curtas e baixas: avisa sem assustar quem está
+   com a sala cheia. O navegador só libera áudio depois de um clique da
+   pessoa; o login já conta como esse clique. */
+var somLigado=true;
+try{ somLigado = localStorage.getItem('mc_aut_som')!=='0'; }catch(e){}
+var _audio=null;
+
+function bip(){
+  if(!somLigado) return;
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC) return;
+    _audio=_audio||new AC();
+    if(_audio.state==='suspended') _audio.resume();
+    [[880,0],[1174.66,0.085]].forEach(function(nota){
+      var osc=_audio.createOscillator(), vol=_audio.createGain();
+      osc.type='sine';
+      osc.frequency.value=nota[0];
+      var t=_audio.currentTime+nota[1];
+      vol.gain.setValueAtTime(0.0001,t);
+      vol.gain.linearRampToValueAtTime(0.085,t+0.012);
+      vol.gain.exponentialRampToValueAtTime(0.0001,t+0.20);
+      osc.connect(vol); vol.connect(_audio.destination);
+      osc.start(t); osc.stop(t+0.22);
+    });
+  }catch(e){ console.error('som:',e); }
+}
+
+function pintaBotaoSom(){
+  var b=document.getElementById('bSom');
+  if(!b) return;
+  b.style.opacity = somLigado?'':'.35';
+  b.title = somLigado?'Aviso sonoro ligado':'Aviso sonoro desligado';
+}
+window.som=function(){
+  somLigado=!somLigado;
+  try{ localStorage.setItem('mc_aut_som', somLigado?'1':'0'); }catch(e){}
+  pintaBotaoSom();
+  if(somLigado) bip();          /* prévia, para saber como soa */
+};
+
+var TITULO_BASE='Autorizações · Monte Castelo';
+function tituloAba(n){
+  document.title = (n>0 ? '('+n+') ' : '') + TITULO_BASE;
+}
+
+/* Guarda o status de cada documento entre um snapshot e outro. Na primeira
+   carga fica null de propósito: senão o app tocaria a cada login, para cada
+   pendente que já existia. */
+var statusVistos=null;
+function checaMudancas(){
+  var mapa={}, pendentes=0, novoPendente=0, meuResolvido=0;
+  docs.forEach(function(d){
+    var st=d.status||'pendente';
+    mapa[d.firestoreId]=st;
+    if(st==='pendente') pendentes++;
+    if(statusVistos){
+      var antes=statusVistos[d.firestoreId];
+      if(st==='pendente' && antes===undefined) novoPendente++;
+      if(d.criadoPor===sessaoEmail && antes==='pendente' && st!=='pendente') meuResolvido++;
+    }
+  });
+  if(statusVistos){
+    if(podeAprovar && novoPendente>0) bip();          /* chegou para assinar */
+    else if(!podeAprovar && meuResolvido>0) bip();    /* o seu foi decidido */
+  }
+  statusVistos=mapa;
+  tituloAba(podeAprovar?pendentes:0);
+}
 
 var compacto=false;
 function aplicaDensidade(){
@@ -1291,6 +1364,7 @@ function ouvir(){
       erroLista='';
       docs=s.docs.map(function(x){ return Object.assign({firestoreId:x.id}, x.data()); })
                  .sort(function(a,b){ return String(b.criadoEm||'').localeCompare(String(a.criadoEm||'')); });
+      checaMudancas();
       render();
     },
     function(e){
@@ -1310,7 +1384,7 @@ onAuthStateChanged(auth, async function(u){
   if(!u){
     document.getElementById('auth').style.display='flex';
     document.getElementById('app').style.display='none';
-    ativo=false; return;
+    ativo=false; statusVistos=null; tituloAba(0); return;
   }
   sessaoEmail=u.email||'';
   var d={};
@@ -1345,6 +1419,7 @@ onAuthStateChanged(auth, async function(u){
     compacto = (pref===null) ? (ehAdmin||ehFinanceiro) : (pref==='1');
   }catch(e){ compacto = (ehAdmin||ehFinanceiro); }
   aplicaDensidade();
+  pintaBotaoSom();
 
   ouvir();
   nav(podeAprovar?'fila':'meus');
