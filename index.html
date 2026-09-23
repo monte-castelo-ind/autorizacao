@@ -114,6 +114,12 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .st-pendente{color:var(--amber);background:rgba(245,176,19,.13);border:1px solid rgba(245,176,19,.36)}
 .st-aprovado{color:var(--green);background:rgba(28,196,126,.13);border:1px solid rgba(28,196,126,.36)}
 .st-recusado{color:var(--red);background:rgba(242,106,106,.13);border:1px solid rgba(242,106,106,.36)}
+.st-pix{color:var(--purple);background:rgba(139,127,232,.15);border:1px solid rgba(139,127,232,.45)}
+.doc-pix{border-left-color:var(--purple)!important}
+.pix-fld{display:flex;align-items:center;gap:8px;background:rgba(139,127,232,.09);
+         border:1px solid rgba(139,127,232,.32);border-radius:9px;padding:9px 12px;margin-bottom:13px}
+.pix-fld input{width:auto;flex:0 0 auto}
+.pix-fld label{margin:0;font-size:13px;font-weight:600;color:var(--purple);text-transform:none;letter-spacing:0}
 .doc-meta{font-size:11.5px;color:var(--muted)}
 .doc-desc{font-size:13px;color:var(--muted);margin:8px 0;line-height:1.55;white-space:pre-wrap}
 .doc-val{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:var(--primary)}
@@ -332,6 +338,9 @@ td{padding:9px;border-bottom:1px solid var(--border)}
         <select id="f-setor" onchange="render()"><option value="">Todos os setores</option></select>
         <select id="f-tipo" onchange="render()"><option value="">Todos os tipos</option></select>
         <input type="text" id="f-busca" placeholder="Buscar título, código ou pessoa" oninput="render()" style="min-width:230px">
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
+                      color:var(--purple);margin:0;text-transform:none;letter-spacing:0;cursor:pointer">
+          <input type="checkbox" id="f-pix" onchange="render()" style="width:auto"> só Pix</label>
         <button class="btn btn-sm btn-ghost" onclick="exportarCSV()" style="margin-left:auto">⤓ CSV</button>
       </div>
       <div id="s-todas"></div>
@@ -599,7 +608,9 @@ window.abrirNovo=function(){
        + '</div>'
        + '<div class="fld" style="margin-top:13px"><label id="lb-desc">Descrição / justificativa</label>'
        +   '<textarea id="n-desc" placeholder="o que é, por que precisa, para quem…"></textarea></div>'
-       + '<div class="fld"><label>Precisa até</label><input type="date" id="n-prazo"></div>',
+       + '<div class="fld"><label>Precisa até</label><input type="date" id="n-prazo"></div>'
+       + '<div class="pix-fld"><input type="checkbox" id="n-pix">'
+       +   '<label for="n-pix">Marcar para o financeiro (comprovante Pix)</label></div>',
     ok:'Enviar para assinatura',
     onOk:function(){
       var tipoId=document.getElementById('n-tipo').value;
@@ -615,6 +626,7 @@ window.abrirNovo=function(){
       var dados={ tipo:(t?t.nome:''), tipoId:tipoId, modelo:modelo,
         setor:setor, titulo:tit, descricao:desc,
         prazo:String(document.getElementById('n-prazo').value||''),
+        pix:!!document.getElementById('n-pix').checked,
         status:'pendente', criadoPor:sessaoEmail, criadoNome:sessaoNome, criadoEm:agora() };
 
       if(modelo==='compra'){
@@ -674,7 +686,10 @@ window.detalhes=function(id){
   var f=d.fornecedor||{}, itens=d.itens||[];
   var compra=(d.modelo==='compra');
 
-  var b='<div class="det">'
+  var b=(d.pix?'<div class="alert" style="color:var(--purple);'
+    + 'background:rgba(139,127,232,.11);border:1px solid rgba(139,127,232,.4)">'
+    + 'Marcado para o financeiro — comprovante Pix</div>':'')
+    + '<div class="det">'
     + campo('Status', st)
     + campo('Tipo', d.tipo)
     + campo('Setor', d.setor)
@@ -753,12 +768,15 @@ window.assinar=function(id){
        +   '<div class="doc-desc">'+esc(d.descricao||'')+'</div>'
        +   '<div class="doc-meta">Pedido por '+esc(d.criadoNome||d.criadoPor||'')+' em '+esc(dataBR(d.criadoEm))+'</div>'
        + '</div>'
+       + '<div class="pix-fld"><input type="checkbox" id="a-pix"'+(d.pix?' checked':'')+'>'
+       +   '<label for="a-pix">Marcar para o financeiro (comprovante Pix)</label></div>'
        + '<div class="fld"><label>Observação da diretoria</label>'
        + '<input type="text" id="a-obs" maxlength="160" placeholder="opcional — sai impressa no documento"></div>',
     ok:'Assinar',
     onOk:function(){
       updateDoc(doc(dbC,'assinaturas',id), {
         status:'aprovado', codigo:novoCodigo(),
+        pix:!!(document.getElementById('a-pix')||{}).checked,
         obsAprovacao:String((document.getElementById('a-obs')||{}).value||'').trim(),
         aprovadoPor:sessaoEmail, aprovadoNome:sessaoNome, aprovadoEm:agora()
       }).catch(function(e){ console.error('assinar:',e); alert('Não foi possível assinar: '+(e.code||e.message)); });
@@ -958,9 +976,10 @@ window.apagarTipo=function(id){
 /* ---- telas ---- */
 function cartao(d, comAcoes){
   var st=d.status||'pendente';
-  var h='<div class="doc doc-'+st+'"><div class="doc-top"><div>'
+  var h='<div class="doc doc-'+st+(d.pix?' doc-pix':'')+'"><div class="doc-top"><div>'
    + '<span class="doc-tit">'+esc(d.titulo||'—')+'</span>'
-   + '<span class="doc-st st-'+st+'">'+st+'</span></div>'
+   + '<span class="doc-st st-'+st+'">'+st+'</span>'
+   + (d.pix?'<span class="doc-st st-pix">Pix</span>':'')+'</div>'
    + '<div class="doc-meta">'+esc(dataBR(d.criadoEm))+'</div></div>'
    + '<div style="margin:8px 0"><span class="tag">'+esc(d.tipo||'—')+'</span>'
    +   '<span class="tag">'+esc(d.setor||'—')+'</span>'
@@ -1043,7 +1062,9 @@ function render(){
     encher('f-setor','Todos os setores',Object.keys(setores).sort());
     encher('f-tipo','Todos os tipos',Object.keys(tps).sort());
 
+    var soPix=!!(document.getElementById('f-pix')||{}).checked;
     var l=docs.filter(function(d){
+      if(soPix && !d.pix) return false;
       if(st && (d.status||'pendente')!==st) return false;
       if(se && d.setor!==se) return false;
       if(ti && d.tipo!==ti) return false;
@@ -1062,6 +1083,9 @@ function render(){
       + '<div class="card"><div class="klabel">Pendentes</div><div class="kval" style="color:var(--amber)">'
       +   l.filter(function(d){ return (d.status||'pendente')==='pendente'; }).length+'</div>'
       +   '<div class="khint">aguardando assinatura</div></div>'
+      + '<div class="card"><div class="klabel">Marcadas Pix</div><div class="kval" style="color:var(--purple)">'
+      +   l.filter(function(d){ return !!d.pix; }).length+'</div>'
+      +   '<div class="khint">para o financeiro</div></div>'
       + '</div>'
       + (l.length ? l.map(function(d){ return cartao(d,false); }).join('')
                   : '<div class="card empty">Nenhum documento com esses filtros.</div>');
@@ -1090,9 +1114,9 @@ function encher(id, vazio, itens){
 }
 
 window.exportarCSV=function(){
-  var l=['Codigo;Status;Tipo;Setor;Titulo;Valor;Solicitante;Criado;Assinado por;Assinado em'];
+  var l=['Codigo;Status;Pix;Tipo;Setor;Titulo;Valor;Solicitante;Criado;Assinado por;Assinado em'];
   docs.forEach(function(d){
-    l.push([d.codigo||'', d.status||'', d.tipo||'', d.setor||'', (d.titulo||'').replace(/;/g,','),
+    l.push([d.codigo||'', d.status||'', (d.pix?'SIM':''), d.tipo||'', d.setor||'', (d.titulo||'').replace(/;/g,','),
       num(d.valor).toFixed(2).replace('.',','), d.criadoNome||d.criadoPor||'',
       dataBR(d.criadoEm), d.aprovadoPor||'', d.aprovadoEm?dataBR(d.aprovadoEm):''].join(';'));
   });
