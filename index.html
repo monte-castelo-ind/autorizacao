@@ -89,6 +89,11 @@ main{margin-left:194px;padding:26px 28px 60px;max-width:1180px}
 h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.5px}
 .psub{font-size:13px;color:var(--muted);margin:3px 0 22px}
 .tools{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.tools input,.tools select{width:auto;min-width:146px}
+.tools .chk{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
+            color:var(--purple);margin:0;text-transform:none;letter-spacing:0;
+            cursor:pointer;white-space:nowrap;padding:0 2px}
+.tools .chk input{min-width:0;width:auto}
 .page{display:none} .page.on{display:block}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:15px 17px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:11px;margin-bottom:15px}
@@ -405,7 +410,7 @@ html[data-pal="vinho"][data-theme="light"]{
     <div class="page on" id="page-meus">
       <div class="tools">
         <button class="btn btn-sm" onclick="abrirNovo()">+ Nova solicitação</button>
-        <select id="f-meus" onchange="render()">
+        <select id="f-meus" onchange="render()" style="min-width:168px">
           <option value="">Todas</option>
           <option value="pendente">Pendentes</option>
           <option value="aprovado">Aprovadas</option>
@@ -419,6 +424,7 @@ html[data-pal="vinho"][data-theme="light"]{
 
     <div class="page" id="page-todas">
       <div class="tools">
+        <input type="text" id="f-busca" placeholder="Buscar..." oninput="render()" style="min-width:186px">
         <select id="f-todas" onchange="render()">
           <option value="">Todos os status</option>
           <option value="pendente">Pendentes</option>
@@ -427,10 +433,7 @@ html[data-pal="vinho"][data-theme="light"]{
         </select>
         <select id="f-setor" onchange="render()"><option value="">Todos os setores</option></select>
         <select id="f-tipo" onchange="render()"><option value="">Todos os tipos</option></select>
-        <input type="text" id="f-busca" placeholder="Buscar título, código ou pessoa" oninput="render()" style="min-width:230px">
-        <label style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;
-                      color:var(--purple);margin:0;text-transform:none;letter-spacing:0;cursor:pointer">
-          <input type="checkbox" id="f-pix" onchange="render()" style="width:auto"> só Pix</label>
+        <label class="chk"><input type="checkbox" id="f-pix" onchange="render()"> só Pix</label>
         <button class="btn btn-sm btn-ghost" onclick="exportarCSV()" style="margin-left:auto">⤓ CSV</button>
       </div>
       <div id="s-todas"></div>
