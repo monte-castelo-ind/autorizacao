@@ -716,8 +716,8 @@ window.abrirNovo=function(){
        + '<div class="fld" style="margin-top:13px"><label id="lb-desc">Descrição / justificativa</label>'
        +   '<textarea id="n-desc" placeholder="o que é, por que precisa, para quem…"></textarea></div>'
        + '<div class="fld"><label>Precisa até</label><input type="date" id="n-prazo"></div>'
-       + '<div class="pix-fld"><input type="checkbox" id="n-pix">'
-       +   '<label for="n-pix">Marcar para o financeiro (comprovante Pix)</label></div>',
+       + (ehAdmin?'<div class="pix-fld"><input type="checkbox" id="n-pix">'
+       +   '<label for="n-pix">Pix Comprovante — marcar para o financeiro</label></div>':''),
     ok:'Enviar para assinatura',
     onOk:function(){
       var tipoId=document.getElementById('n-tipo').value;
@@ -733,7 +733,7 @@ window.abrirNovo=function(){
       var dados={ tipo:(t?t.nome:''), tipoId:tipoId, modelo:modelo,
         setor:setor, titulo:tit, descricao:desc,
         prazo:String(document.getElementById('n-prazo').value||''),
-        pix:!!document.getElementById('n-pix').checked,
+        pix:!!(document.getElementById('n-pix')||{}).checked,
         status:'pendente', criadoPor:sessaoEmail, criadoNome:sessaoNome, criadoEm:agora() };
 
       if(modelo==='compra'){
@@ -786,6 +786,20 @@ function campo(rotulo, valor){
   return '<div><span>'+esc(rotulo)+'</span><b>'+(valor?esc(valor):'—')+'</b></div>';
 }
 
+/* A marca é recado da diretoria para o financeiro, e às vezes a necessidade
+   do comprovante só aparece depois. Por isso alterna em qualquer status,
+   inclusive já assinada: o documento não muda, só o aviso interno. */
+window.togglePix=function(id){
+  if(!ehAdmin){ alert('Só a diretoria marca Pix Comprovante.'); return; }
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d) return;
+  var novo=!d.pix;
+  updateDoc(doc(dbC,'assinaturas',id), { pix:novo })
+    .then(function(){ d.pix=novo; render(); detalhes(id); })
+    .catch(function(e){ console.error('pix:',e);
+      alert('Não foi possível alterar: '+(e.code||e.message)); });
+};
+
 window.detalhes=function(id){
   var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
   if(!d) return;
@@ -795,7 +809,7 @@ window.detalhes=function(id){
 
   var b=(d.pix?'<div class="alert" style="color:var(--purple);'
     + 'background:rgba(139,127,232,.11);border:1px solid rgba(139,127,232,.4)">'
-    + 'Marcado para o financeiro — comprovante Pix</div>':'')
+    + 'Pix Comprovante — marcado para o financeiro</div>':'')
     + '<div class="det">'
     + campo('Status', st)
     + campo('Tipo', d.tipo)
@@ -848,11 +862,17 @@ window.detalhes=function(id){
   if(st==='recusado') b+='<div class="doc-rec">Recusado: '+esc(d.motivoRecusa||'')+'</div>';
 
   var extra='';
+  if(ehAdmin){
+    extra+='<button class="btn btn-sm btn-ghost" style="margin-right:auto;'
+      + 'color:var(--purple);border-color:var(--purple)" '
+      + 'onclick="togglePix(\''+esc(id)+'\')">'
+      + (d.pix?'Desmarcar Pix Comprovante':'Marcar Pix Comprovante')+'</button>';
+  }
   if(st==='pendente' && podeAprovar){
-    extra='<button class="btn btn-sm" style="margin-right:auto" onclick="assinar(\''+esc(id)+'\')">Assinar</button>'
+    extra+='<button class="btn btn-sm" onclick="assinar(\''+esc(id)+'\')">Assinar</button>'
         + '<button class="btn btn-sm btn-ghost" onclick="recusar(\''+esc(id)+'\')">Recusar</button>';
   }else if(st==='aprovado'){
-    extra='<button class="btn btn-sm btn-ghost" style="margin-right:auto" onclick="imprimir(\''+esc(id)+'\')">⎙ Imprimir / PDF</button>';
+    extra+='<button class="btn btn-sm btn-ghost" onclick="imprimir(\''+esc(id)+'\')">⎙ Imprimir / PDF</button>';
   }
 
   modal({ titulo:esc(d.titulo||'—'), wide:true,
@@ -875,15 +895,15 @@ window.assinar=function(id){
        +   '<div class="doc-desc">'+esc(d.descricao||'')+'</div>'
        +   '<div class="doc-meta">Pedido por '+esc(d.criadoNome||d.criadoPor||'')+' em '+esc(dataBR(d.criadoEm))+'</div>'
        + '</div>'
-       + '<div class="pix-fld"><input type="checkbox" id="a-pix"'+(d.pix?' checked':'')+'>'
-       +   '<label for="a-pix">Marcar para o financeiro (comprovante Pix)</label></div>'
+       + (ehAdmin?'<div class="pix-fld"><input type="checkbox" id="a-pix"'+(d.pix?' checked':'')+'>'
+       +   '<label for="a-pix">Pix Comprovante — marcar para o financeiro</label></div>':'')
        + '<div class="fld"><label>Observação da diretoria</label>'
        + '<input type="text" id="a-obs" maxlength="160" placeholder="opcional — sai impressa no documento"></div>',
     ok:'Assinar',
     onOk:function(){
       updateDoc(doc(dbC,'assinaturas',id), {
         status:'aprovado', codigo:novoCodigo(),
-        pix:!!(document.getElementById('a-pix')||{}).checked,
+        pix: ehAdmin ? !!(document.getElementById('a-pix')||{}).checked : !!d.pix,
         obsAprovacao:String((document.getElementById('a-obs')||{}).value||'').trim(),
         aprovadoPor:sessaoEmail, aprovadoNome:sessaoNome, aprovadoEm:agora()
       }).catch(function(e){ console.error('assinar:',e); alert('Não foi possível assinar: '+(e.code||e.message)); });
@@ -1086,7 +1106,7 @@ function cartao(d, comAcoes){
   var h='<div class="doc doc-'+st+(d.pix?' doc-pix':'')+'"><div class="doc-top"><div>'
    + '<span class="doc-tit">'+esc(d.titulo||'—')+'</span>'
    + '<span class="doc-st st-'+st+'">'+st+'</span>'
-   + (d.pix?'<span class="doc-st st-pix">Pix</span>':'')+'</div>'
+   + (d.pix?'<span class="doc-st st-pix">Pix Comprovante</span>':'')+'</div>'
    + '<div class="doc-meta">'+esc(dataBR(d.criadoEm))+'</div></div>'
    + '<div style="margin:8px 0"><span class="tag">'+esc(d.tipo||'—')+'</span>'
    +   '<span class="tag">'+esc(d.setor||'—')+'</span>'
