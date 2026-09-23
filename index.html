@@ -528,9 +528,10 @@ document.addEventListener('DOMContentLoaded', function(){
 
 /* ===== aviso de documento novo =====
    Som sintetizado na hora, para o app seguir sendo um arquivo só — sem mp3
-   para hospedar. Duas notas curtas e baixas: avisa sem assustar quem está
-   com a sala cheia. O navegador só libera áudio depois de um clique da
-   pessoa; o login já conta como esse clique. */
+   para hospedar. Três notas subindo (sol · dó · mi), curtas e baixas: o
+   arpejo se destaca do barulho da fábrica melhor que uma nota isolada, sem
+   virar alarme. O navegador só libera áudio depois de um clique da pessoa;
+   o login já conta como esse clique. */
 var somLigado=true;
 try{ somLigado = localStorage.getItem('mc_aut_som')!=='0'; }catch(e){}
 var _audio=null;
@@ -542,16 +543,17 @@ function bip(){
     if(!AC) return;
     _audio=_audio||new AC();
     if(_audio.state==='suspended') _audio.resume();
-    [[880,0],[1174.66,0.085]].forEach(function(nota){
+    /* [frequência, atraso, duração] */
+    [[783.99,0,0.18],[1046.50,0.075,0.18],[1318.51,0.15,0.22]].forEach(function(nota){
       var osc=_audio.createOscillator(), vol=_audio.createGain();
       osc.type='sine';
       osc.frequency.value=nota[0];
       var t=_audio.currentTime+nota[1];
       vol.gain.setValueAtTime(0.0001,t);
       vol.gain.linearRampToValueAtTime(0.085,t+0.012);
-      vol.gain.exponentialRampToValueAtTime(0.0001,t+0.20);
+      vol.gain.exponentialRampToValueAtTime(0.0001,t+nota[2]);
       osc.connect(vol); vol.connect(_audio.destination);
-      osc.start(t); osc.stop(t+0.22);
+      osc.start(t); osc.stop(t+nota[2]+0.03);
     });
   }catch(e){ console.error('som:',e); }
 }
