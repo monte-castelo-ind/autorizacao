@@ -129,6 +129,9 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .st-pix{color:var(--purple);background:rgba(139,127,232,.15);border:1px solid rgba(139,127,232,.45)}
 /* pago = mesmo roxo, preenchido. Não usa verde: verde já é "aprovado". */
 .st-pixpago{color:#fff;background:var(--purple);border:1px solid var(--purple)}
+.st-pixapagar{color:var(--purple);background:transparent;border:1px dashed var(--purple)}
+.st-pixapagar::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;
+                      background:var(--purple);margin-right:6px;vertical-align:1px}
 #box-chave{display:none;margin:-4px 0 13px}
 #box-chave.on{display:block}
 .pix-pago{display:flex;gap:10px;align-items:flex-start;border-radius:10px;padding:10px 13px;
@@ -1300,9 +1303,13 @@ function cartao(d, comAcoes){
   var h='<div class="doc doc-'+st+(d.pix?' doc-pix':'')+'"><div class="doc-top"><div>'
    + '<span class="doc-tit">'+esc(d.titulo||'—')+'</span>'
    + '<span class="doc-st st-'+st+'">'+st+'</span>'
-   + (d.pix?(d.pixPago
-        ? '<span class="doc-st st-pixpago">Pix Pago</span>'
-        : '<span class="doc-st st-pix">Pix Comprovante</span>'):'')+'</div>'
+   + (d.pix
+        ? (d.pixPago
+            ? '<span class="doc-st st-pixpago">Pix Pago</span>'
+            : (pixAPagar(d)
+                ? '<span class="doc-st st-pixapagar" title="Assinada — o financeiro ainda não confirmou o pagamento">Pix a pagar</span>'
+                : '<span class="doc-st st-pix">Pix Comprovante</span>'))
+        : '')+'</div>'
    + '<div class="doc-meta">'+esc(dataBR(d.criadoEm))+'</div></div>'
    + '<div style="margin:8px 0"><span class="tag">'+esc(d.tipo||'—')+'</span>'
    +   '<span class="tag">'+esc(d.setor||'—')+'</span>'
