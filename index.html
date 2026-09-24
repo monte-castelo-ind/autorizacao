@@ -190,6 +190,15 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .det b{font-size:13.5px;font-weight:600;overflow-wrap:anywhere}
 .det-sec{font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
          color:var(--muted);margin:0 0 7px}
+/* Pix Copia e Cola tem 150+ caracteres sem espaço: sem quebra forçada ele
+   empurra o painel para o lado e cria rolagem horizontal. */
+.det-pix{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+         margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);white-space:normal}
+.det-pix.so{margin-top:0;padding-top:0;border-top:none}
+.det-pix-rot{font-size:10px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.4px}
+.det-pix-val{flex:1 1 220px;min-width:0;font-size:12px;line-height:1.45;
+             overflow-wrap:anywhere;word-break:break-all}
+.det-txt{overflow-wrap:anywhere}
 .det-txt{background:var(--card-2);border-radius:10px;padding:11px 13px;font-size:13px;
          line-height:1.6;white-space:pre-wrap;margin-bottom:13px}
 .it-soma{text-align:right;font-size:13.5px}
@@ -211,10 +220,14 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 #imp{display:none}
 @media print{
   @page{ size:A4 portrait; margin:13mm 12mm }
-  body *{ visibility:hidden !important }
+  /* display:none e não visibility:hidden — invisível continua ocupando
+     lugar, e a impressora paginava a altura da lista inteira em branco:
+     quanto mais autorizações na tela, mais folhas vazias no fim. */
+  html, body{ height:auto !important; background:#fff !important }
+  body > *:not(#imp){ display:none !important }
   #imp, #imp *{ visibility:visible !important }
   #imp, #imp *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
-  #imp{ display:block !important; position:absolute; left:0; top:0; width:100%;
+  #imp{ display:block !important; position:static; width:100%;
         color:#000; background:#fff; font-family:Arial, sans-serif; font-size:11px }
   #imp .p-cab{ display:flex; justify-content:space-between; align-items:center;
                border-bottom:2px solid #000; padding-bottom:9px }
@@ -232,6 +245,7 @@ td{padding:9px;border-bottom:1px solid var(--border)}
   #imp .p-val{ border:1px solid #000; background:#f0f0f0; padding:8px 10px; margin-bottom:12px;
                font-size:13px; font-weight:bold; text-align:right }
   #imp .p-ass{ margin-top:36px; display:flex; align-items:flex-end; justify-content:center;
+               break-inside:avoid; page-break-inside:avoid;
                gap:44px; flex-wrap:wrap }
   #imp .p-ass-b{ text-align:center; min-width:270px }
   #imp .p-firma{ font-family:'Mrs Saint Delafield', cursive; font-size:44px; line-height:.95;
@@ -270,9 +284,14 @@ td{padding:9px;border-bottom:1px solid var(--border)}
   #imp .au-itens tfoot td{ border:1px solid #000; background:#f0f0f0; padding:6px }
   #imp .c{ text-align:center }
   #imp .r{ text-align:right }
+  /* chave Pix na folha: fonte menor e quebra em qualquer ponto — o Copia e
+     Cola ocupa duas linhas curtas em vez de estourar a margem */
+  #imp .pix-imp{ font-family:'Courier New', monospace; font-size:8.5px; line-height:1.4;
+                 word-break:break-all; overflow-wrap:anywhere }
   #imp .au-obs{ border:1px solid #000; border-top:none; padding:7px; min-height:52px;
                 font-size:10.5px; line-height:1.5; white-space:pre-wrap }
-  #imp .au-ass{ margin-top:40px; display:flex; align-items:flex-end;
+  #imp .au-ass{ margin-top:26px; display:flex; align-items:flex-end;
+                break-inside:avoid; page-break-inside:avoid;
                 justify-content:center; gap:44px; flex-wrap:wrap }
   #imp .au-ass-bloco{ text-align:center; min-width:270px }
   #imp .au-ass-firma{ font-family:'Mrs Saint Delafield', cursive; font-size:44px;
@@ -285,7 +304,7 @@ td{padding:9px;border-bottom:1px solid var(--border)}
                     padding:7px 14px; transform:rotate(-6deg); text-align:center; flex:0 0 auto }
   #imp .au-carimbo b{ display:block; font-size:13px; font-weight:bold; letter-spacing:.13em }
   #imp .au-carimbo span{ display:block; font-size:8px; letter-spacing:.08em; margin-top:2px }
-  #imp .au-rastro{ flex:1 1 100%; text-align:center; font-size:7.5px; color:#888; margin-top:14px }
+  #imp .au-rastro{ flex:1 1 100%; text-align:center; font-size:7.5px; color:#888; margin-top:8px }
   #imp .au-rastro b{ font-family:'Courier New', monospace; font-size:10px; color:#000;
                      border:1.2px solid #000; padding:1px 6px; letter-spacing:1.2px }
   #imp tr{ page-break-inside:avoid }
@@ -1048,9 +1067,14 @@ window.confirmarPix=function(id){
     titulo:'Confirmar Pix efetuado', sub:esc(d.titulo||''),
     body:'<div class="det">'
        +   campo('Valor', fmtR$(d.valor))
-       +   campo('Chave Pix', d.pixChave||'—')
        +   campo('Favorecido', (d.fornecedor&&d.fornecedor.razao)||'—')
        + '</div>'
+       + '<div class="det-txt"><div class="det-pix so">'
+       +   '<span class="det-pix-rot">Chave Pix</span>'
+       +   '<span class="det-pix-val mono">'+esc(d.pixChave||'—')+'</span>'
+       +   (d.pixChave?'<button class="btn btn-sm btn-ghost" onclick="copiaChave(\''+esc(id)+'\',this)">Copiar</button>':'')
+       + '</div></div>'
+
        + '<div class="fld"><label>ID da transação ou observação</label>'
        + '<input type="text" id="c-obs" maxlength="160" autocomplete="off" '
        + 'placeholder="opcional — o código E2E do comprovante ajuda a achar depois"></div>',
@@ -1079,6 +1103,28 @@ window.desfazerPix=function(id){
       alert('Não foi possível desfazer: '+(e.code||e.message)); });
 };
 
+/* Chave Pix mesclada na observação da folha impressa. Não é campo novo na
+   folha: entra no mesmo quadro, depois do texto, para não custar espaço. */
+function pixNaFolha(d, temTextoAntes){
+  if(!d.pix || !d.pixChave) return '';
+  return (temTextoAntes?'\n':'')
+       + '<b>Pix</b> — <span class="pix-imp">'+esc(d.pixChave)+'</span>';
+}
+
+window.copiaChave=function(id, btn){
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d || !d.pixChave) return;
+  function feito(){
+    if(!btn) return;
+    var t=btn.textContent; btn.textContent='Copiado ✓';
+    setTimeout(function(){ btn.textContent=t; },1400);
+  }
+  function manual(){ prompt('Copie a chave Pix:', d.pixChave); }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(d.pixChave).then(feito).catch(manual);
+  }else manual();
+};
+
 function pixAPagar(d){ return !!d.pix && (d.status||'pendente')==='aprovado' && !d.pixPago; }
 
 window.detalhes=function(id){
@@ -1090,8 +1136,7 @@ window.detalhes=function(id){
 
   var b=(d.pix?'<div class="alert" style="color:var(--purple);'
     + 'background:rgba(139,127,232,.11);border:1px solid rgba(139,127,232,.4)">'
-    + 'Pix Comprovante — marcado para o financeiro'
-    + (d.pixChave?' · chave <b class="mono">'+esc(d.pixChave)+'</b>':'')+'</div>':'')
+    + 'Pix Comprovante — marcado para o financeiro</div>':'')
     + (d.pix && d.pixPago
         ? '<div class="pix-pago"><div>✓</div><div><b>Pix pago</b> por '+esc(d.pixPagoNome||d.pixPagoPor||'')
           + ' em '+esc(dataBR(d.pixPagoEm))+' às '+esc(horaBR(d.pixPagoEm))
@@ -1136,9 +1181,18 @@ window.detalhes=function(id){
     b+='<div class="it-soma" style="margin:0 0 13px">Valor: <b>'+fmtR$(d.valor)+'</b></div>';
   }
 
-  if(d.descricao){
+  var temObs=!!d.descricao, temChave=!!(d.pix && d.pixChave);
+  if(temObs || temChave){
     b+='<div class="det-sec">'+(compra?'Observação':'Descrição / justificativa')+'</div>'
-      + '<div class="det-txt">'+esc(d.descricao)+'</div>';
+      + '<div class="det-txt">'+(temObs?esc(d.descricao):'')
+      + (temChave
+          ? '<div class="det-pix'+(temObs?'':' so')+'">'
+            + '<span class="det-pix-rot">Chave Pix</span>'
+            + '<span class="det-pix-val mono">'+esc(d.pixChave)+'</span>'
+            + '<button class="btn btn-sm btn-ghost" onclick="copiaChave(\''+esc(id)+'\',this)">Copiar</button>'
+            + '</div>'
+          : '')
+      + '</div>';
   }
 
   if(st==='aprovado'){
@@ -1259,7 +1313,14 @@ function folhaCompra(d){
       + '<td class="r">'+(tot>0?fmtN(tot,2):'—')+'</td></tr>';
   }).join('');
   var vazias='';   /* linhas em branco para a folha manter o corpo do modelo */
-  for(var k=itens.length;k<12;k++) vazias+='<tr><td class="c">&nbsp;</td><td></td><td></td><td></td><td></td></tr>';
+  /* As linhas em branco só completam o corpo do modelo: cada item ocupa uma
+     unidade, ou duas se o texto quebrar de linha. Com vazias fixas, item de
+     descrição longa empurrava a assinatura para uma segunda folha. */
+  var unidades=itens.reduce(function(t,it){
+    var txt=String(it.nome||'')+(it.codigo?' (cód '+it.codigo+')':'');
+    return t+(txt.length>58?2:1);
+  },0);
+  for(var k=unidades;k<10;k++) vazias+='<tr><td class="c">&nbsp;</td><td></td><td></td><td></td><td></td></tr>';
 
   return '<div class="au-cab">'
     +   '<img class="au-logo" src="'+LOGO_MC+'" alt="Monte Castelo">'
@@ -1285,6 +1346,7 @@ function folhaCompra(d){
     + '<tfoot><tr><td colspan="4" class="r"><b>VALOR TOTAL:</b></td>'
     +   '<td class="r"><b>'+(total>0?fmtN(total,2):'—')+'</b></td></tr></tfoot></table>'
     + '<div class="au-obs"><b>OBSERVAÇÃO:</b><br>'+esc(d.descricao||'')
+    +   pixNaFolha(d, !!d.descricao)
     +   (d.obsAprovacao?'\n\nDiretoria: '+esc(d.obsAprovacao):'')+'</div>'
     + blocoAssinatura(d);
 }
@@ -1304,6 +1366,7 @@ function folhaSimples(d){
     +   '<td><b>Assinado em:</b> '+esc(dia)+'</td></tr></table>'
     + '<div class="p-sec">'+esc(d.titulo||'')+'</div>'
     + '<div class="p-box">'+esc(d.descricao||'')
+    +   pixNaFolha(d, !!d.descricao)
     +   (d.obsAprovacao?'\n\nObservação da diretoria: '+esc(d.obsAprovacao):'')+'</div>'
     + (num(d.valor)>0?'<div class="p-val">VALOR: '+fmtR$(d.valor)+'</div>':'')
     + '<div class="p-ass"><div class="p-ass-b">'
@@ -1653,5 +1716,6 @@ onAuthStateChanged(auth, async function(u){
   nav(podeAprovar?'fila':'meus');
 });
 </script>
+<script src="https://monte-castelo-ind.github.io/voltar.js"></script>
 </body>
 </html>
