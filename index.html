@@ -119,6 +119,7 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .doc-pendente{border-left-color:var(--amber)}
 .doc-aprovado{border-left-color:var(--green)}
 .doc-recusado{border-left-color:var(--red);opacity:.76}
+.doc-cancelado{border-left-color:var(--muted);opacity:.62}
 .doc-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .doc-tit{font-size:15.5px;font-weight:700;letter-spacing:-.2px}
 .doc-st{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
@@ -126,6 +127,8 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .st-pendente{color:var(--amber);background:rgba(245,176,19,.13);border:1px solid rgba(245,176,19,.36)}
 .st-aprovado{color:var(--green);background:rgba(28,196,126,.13);border:1px solid rgba(28,196,126,.36)}
 .st-recusado{color:var(--red);background:rgba(242,106,106,.13);border:1px solid rgba(242,106,106,.36)}
+.st-cancelado{color:var(--muted);background:transparent;border:1px solid var(--border)}
+.tag-origem{color:var(--blue);border-color:var(--blue)}
 .st-pix{color:var(--purple);background:rgba(139,127,232,.15);border:1px solid rgba(139,127,232,.45)}
 /* pago = mesmo roxo, preenchido. Não usa verde: verde já é "aprovado". */
 .st-pixpago{color:#fff;background:var(--purple);border:1px solid var(--purple)}
@@ -445,6 +448,7 @@ html[data-pal="vinho"][data-theme="light"]{
           <option value="pendente">Pendentes</option>
           <option value="aprovado">Aprovadas</option>
           <option value="recusado">Recusadas</option>
+          <option value="cancelado">Canceladas</option>
         </select>
       </div>
       <div id="s-meus"></div>
@@ -460,6 +464,7 @@ html[data-pal="vinho"][data-theme="light"]{
           <option value="pendente">Pendentes</option>
           <option value="aprovado">Aprovadas</option>
           <option value="recusado">Recusadas</option>
+          <option value="cancelado">Canceladas</option>
         </select>
         <select id="f-setor" onchange="render()"><option value="">Todos os setores</option></select>
         <select id="f-tipo" onchange="render()"><option value="">Todos os tipos</option></select>
@@ -501,7 +506,7 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
          setPersistence, browserLocalPersistence }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, onSnapshot, doc, getDoc, addDoc, updateDoc,
-         deleteDoc, query, where, orderBy, limit, getDocs }
+         deleteDoc, query, where, orderBy, limit, getDocs, writeBatch }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const cfg={ apiKey:"AIzaSyCH_t074MvkJn-qVMvCtLfEMaQHf_e_d7M",
@@ -1146,6 +1151,7 @@ window.detalhes=function(id){
     + '<div class="det">'
     + campo('Status', st)
     + campo('Tipo', d.tipo)
+    + (deOrigemPecas(d)?campo('Origem', 'App de Peças · pedido de '+(d.origem.solicitadoPor||'—')):'')
     + campo('Setor', d.setor)
     + campo(compra?'Comprador':'Solicitante', d.criadoNome||d.criadoPor)
     + campo('Criado em', dataBR(d.criadoEm))
@@ -1229,6 +1235,34 @@ window.detalhes=function(id){
           body:b, extra:extra });
 };
 
+/* ---- integração com o app de Peças ----
+   Pedido de peça validado pelo financeiro chega aqui como autorização comum,
+   com origem.app='pecas'. Assinar ou recusar precisa mudar os DOIS lados, e
+   por isso vai num writeBatch: ou os dois gravam, ou nenhum. Se quem assina
+   não tiver permissão no Peças, nada é assinado — melhor do que uma
+   autorização aprovada com o pedido ainda parado do outro lado. */
+function deOrigemPecas(d){ return !!(d && d.origem && d.origem.app==='pecas' && d.origem.pedidoId); }
+
+function gravaComPedido(id, d, dadosAut, dadosPedido, rotulo){
+  var pr;
+  if(deOrigemPecas(d)){
+    var lote=writeBatch(dbC);
+    lote.update(doc(dbC,'assinaturas',id), dadosAut);
+    lote.update(doc(dbC,'pecasPedidos',d.origem.pedidoId), dadosPedido);
+    pr=lote.commit();
+  }else{
+    pr=updateDoc(doc(dbC,'assinaturas',id), dadosAut);
+  }
+  pr.catch(function(e){
+    console.error(rotulo+':',e);
+    alert('Não foi possível '+rotulo+': '+(e.code||e.message)
+      + (deOrigemPecas(d) && e.code==='permission-denied'
+          ? '\n\nEsta autorização veio do app de Peças, e sua conta não tem permissão para '
+            + 'atualizar o pedido lá. Nada foi gravado.' : ''));
+  });
+  return pr;
+}
+
 /* ---- assinar ---- */
 window.assinar=function(id){
   if(!podeAprovar){ alert('Você não assina documentos.'); return; }
@@ -1250,18 +1284,24 @@ window.assinar=function(id){
        + '<input type="text" id="a-obs" maxlength="160" placeholder="opcional — sai impressa no documento"></div>',
     ok:'Assinar',
     onOk:function(){
-      updateDoc(doc(dbC,'assinaturas',id), {
+      var dados={
         status:'aprovado', codigo:novoCodigo(),
         pix: ehAdmin ? !!(document.getElementById('a-pix')||{}).checked : !!d.pix,
         obsAprovacao:String((document.getElementById('a-obs')||{}).value||'').trim(),
         aprovadoPor:sessaoEmail, aprovadoNome:sessaoNome, aprovadoEm:agora()
-      }).catch(function(e){ console.error('assinar:',e); alert('Não foi possível assinar: '+(e.code||e.message)); });
+      };
+      gravaComPedido(id, d, dados, {
+        status:'autorizado', autorizadoPor:sessaoEmail, autorizadoEm:dados.aprovadoEm,
+        codigoAutorizacao:dados.codigo
+      }, 'assinar');
     }
   });
 };
 
 window.recusar=function(id){
   if(!podeAprovar) return;
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d) return;
   modal({
     titulo:'Recusar solicitação', perigo:1,
     body:'<div class="alert a-warn">▲ A solicitação continua no histórico, marcada como recusada.</div>'
@@ -1270,10 +1310,13 @@ window.recusar=function(id){
     onOk:function(){
       var m=String((document.getElementById('r-mot')||{}).value||'').trim();
       if(!m){ alert('Informe o motivo — quem pediu precisa saber o porquê.'); return false; }
-      updateDoc(doc(dbC,'assinaturas',id), {
-        status:'recusado', motivoRecusa:m,
-        recusadoPor:sessaoEmail, recusadoEm:agora()
-      }).catch(function(e){ console.error('recusar:',e); alert('Não foi possível recusar: '+(e.code||e.message)); });
+      var quando=agora();
+      gravaComPedido(id, d, {
+        status:'recusado', motivoRecusa:m, recusadoPor:sessaoEmail, recusadoEm:quando
+      }, {
+        status:'cancelado', canceladoPor:sessaoEmail, canceladoEm:quando,
+        motivoCancelamento:'Recusado pela diretoria: '+m
+      }, 'recusar');
     }
   });
 };
@@ -1473,6 +1516,7 @@ function cartao(d, comAcoes){
         : '')+'</div>'
    + '<div class="doc-meta">'+esc(dataBR(d.criadoEm))+'</div></div>'
    + '<div style="margin:8px 0"><span class="tag">'+esc(d.tipo||'—')+'</span>'
+   +   (deOrigemPecas(d)?'<span class="tag tag-origem">App de Peças</span>':'')
    +   '<span class="tag">'+esc(d.setor||'—')+'</span>'
    +   '<span class="tag">'+esc(d.criadoNome||d.criadoPor||'')+'</span>'
    +   (d.prazo?'<span class="tag">até '+esc(dataBR(d.prazo))+'</span>':'')+'</div>';
@@ -1490,6 +1534,8 @@ function cartao(d, comAcoes){
     if(d.obsAprovacao) h+='<div class="doc-desc" style="font-style:italic">'+esc(d.obsAprovacao)+'</div>';
   }
   if(st==='recusado') h+='<div class="doc-rec">Recusado: '+esc(d.motivoRecusa||'')+'</div>';
+  if(st==='cancelado') h+='<div class="doc-rec" style="color:var(--muted);background:var(--card-2)">Cancelado'
+     +(d.motivoCancelamento?': '+esc(d.motivoCancelamento):'')+'</div>';
   h+='<div class="doc-btns">';
   if(comAcoes && st==='pendente' && podeAprovar){
     h+='<button class="btn btn-sm" onclick="assinar(\'' + esc(d.firestoreId) + '\')">Assinar</button>'
