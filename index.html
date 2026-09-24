@@ -482,7 +482,7 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
          setPersistence, browserLocalPersistence }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, onSnapshot, doc, getDoc, addDoc, updateDoc,
-         deleteDoc, query, where, orderBy, limit }
+         deleteDoc, query, where, orderBy, limit, getDocs }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const cfg={ apiKey:"AIzaSyCH_t074MvkJn-qVMvCtLfEMaQHf_e_d7M",
@@ -705,30 +705,124 @@ function modeloDoTipo(id){
    enxerga. Não cria coleção nova nem gasta leitura a mais: reaproveita o que
    já está carregado. Quem só vê os próprios documentos só relembra os
    fornecedores que ele mesmo lançou. */
-var FORN={};
-function carregaFornecedores(){
-  FORN={};
-  docs.forEach(function(d){
-    var f=d.fornecedor;
-    if(!f || !f.razao) return;
-    var k=String(f.razao).trim().toUpperCase();
+/* ===== Fornecedores =====
+   Um cadastro só para a empresa: pecasFornecedores, o mesmo que o app de
+   Peças usa para imprimir a Autorização de Compra dele. Antes cada app tinha
+   sua lista e elas iam divergir — CNPJ certo num, errado no outro.
+
+   Leitura: uma vez por sessão, com cache (getDocs, não onSnapshot — a lista
+   é pequena e muda pouco, não vale leitura contínua).
+   Escrita: o Autorizações só ACRESCENTA fornecedor novo. Não sobrescreve um
+   que já existe — corrigir cadastro continua sendo de quem cuida do Peças,
+   para um pedido digitado às pressas não estragar o dado de todo mundo.
+
+   Somam-se ainda os fornecedores das próprias autorizações, para quem ainda
+   não tem nada no cadastro não ficar sem sugestão. */
+var FORN={};          /* índice: RAZÃO, NOME e CNPJ (só dígitos) -> dados */
+var FORN_LISTA=[];    /* nomes para o datalist, sem repetição */
+var FORN_REG=null;    /* cache do pecasFornecedores nesta sessão */
+
+function soDigitos(v){ return String(v||'').replace(/\D/g,''); }
+function chaveNome(v){ return String(v||'').trim().toUpperCase(); }
+
+function carregaCadastroForn(){
+  if(FORN_REG) return Promise.resolve(FORN_REG);
+  return getDocs(query(collection(dbC,'pecasFornecedores'), limit(500)))
+    .then(function(s){
+      FORN_REG=s.docs.map(function(x){ return Object.assign({firestoreId:x.id}, x.data()); });
+      return FORN_REG;
+    })
+    .catch(function(e){
+      /* sem permissão ou sem rede: segue só com o histórico, não trava o formulário */
+      console.error('pecasFornecedores:',e);
+      FORN_REG=[]; return FORN_REG;
+    });
+}
+
+function indexaForn(f, origem, quando){
+  var razao=String(f.razao||f.nome||'').trim();
+  if(!razao) return;
+  var item={ razao:razao, cnpj:f.cnpj||'', endereco:f.endereco||'',
+             municipio:f.municipio||'', pagamento:f.pagamento||'',
+             _origem:origem, _em:quando||'' };
+  var chaves=[chaveNome(razao)];
+  if(f.nome && chaveNome(f.nome)!==chaveNome(razao)) chaves.push(chaveNome(f.nome));
+  if(soDigitos(f.cnpj).length>=11) chaves.push(soDigitos(f.cnpj));
+  chaves.forEach(function(k){
     var atual=FORN[k];
-    if(!atual || String(d.criadoEm||'') > String(atual._em||'')){
-      FORN[k]={ razao:f.razao, cnpj:f.cnpj, endereco:f.endereco,
-                municipio:f.municipio, pagamento:f.pagamento, _em:d.criadoEm };
+    /* cadastro oficial vence histórico; entre dois do mesmo tipo, o mais novo */
+    if(!atual
+       || (origem==='cadastro' && atual._origem!=='cadastro')
+       || (origem===atual._origem && String(quando||'') > String(atual._em||''))){
+      FORN[k]=item;
     }
   });
-  return Object.keys(FORN).sort();
 }
-window.autoFornecedor=function(){
-  var el=document.getElementById('f-razao'); if(!el) return;
-  var f=FORN[String(el.value||'').trim().toUpperCase()];
-  if(!f) return;
-  function põe(id,v){ var e=document.getElementById(id); if(e) e.value=v||''; }
+
+function carregaFornecedores(){
+  FORN={};
+  (FORN_REG||[]).forEach(function(f){ indexaForn(f,'cadastro',f.atualizadoEm); });
+  docs.forEach(function(d){ if(d.fornecedor) indexaForn(d.fornecedor,'historico',d.criadoEm); });
+  var vistos={};
+  FORN_LISTA=[];
+  Object.keys(FORN).forEach(function(k){
+    var r=FORN[k].razao, rk=chaveNome(r);
+    if(!vistos[rk]){ vistos[rk]=1; FORN_LISTA.push(r); }
+  });
+  FORN_LISTA.sort(function(a,b){ return a.localeCompare(b,'pt-BR'); });
+  return FORN_LISTA;
+}
+
+function pintaListaForn(){
+  var dl=document.getElementById('forn-lista');
+  if(!dl) return;
+  dl.innerHTML=carregaFornecedores().map(function(r){
+    return '<option value="'+esc(r)+'">'; }).join('');
+}
+
+function avisoForn(txt, tom){
+  var el=document.getElementById('forn-ok');
+  if(!el) return;
+  el.textContent=txt||'';
+  el.style.color = tom==='ok' ? 'var(--green)' : 'var(--muted)';
+}
+
+/* Casa pelo nome digitado ou pelo CNPJ. Preenche só o que estiver vazio,
+   para não apagar o que a pessoa já corrigiu na mão. */
+window.autoFornecedor=function(origem){
+  var campo=document.getElementById(origem==='cnpj'?'f-cnpj':'f-razao');
+  if(!campo) return;
+  var k = origem==='cnpj' ? soDigitos(campo.value) : chaveNome(campo.value);
+  var f = k ? FORN[k] : null;
+  if(!f){ avisoForn(''); return; }
+  function põe(id,v){ var e=document.getElementById(id); if(e && !String(e.value||'').trim()) e.value=v||''; }
+  if(origem==='cnpj'){ var r=document.getElementById('f-razao'); if(r) r.value=f.razao; }
   põe('f-cnpj',f.cnpj); põe('f-end',f.endereco);
   põe('f-mun',f.municipio); põe('f-pag',f.pagamento);
   /* data de entrega não se repete: é de cada pedido */
+  avisoForn(f._origem==='cadastro'
+    ? '✓ Fornecedor do cadastro — dados preenchidos'
+    : '✓ Já usado em autorização anterior — dados preenchidos', 'ok');
 };
+
+/* Depois de enviar: se o fornecedor não existe no cadastro, acrescenta.
+   Falhar aqui não pode derrubar a autorização, então só registra no console. */
+function guardaFornecedorNovo(f){
+  if(!f || !f.razao) return;
+  var jaTem=(FORN_REG||[]).some(function(x){
+    return (soDigitos(f.cnpj).length>=11 && soDigitos(x.cnpj)===soDigitos(f.cnpj))
+        || chaveNome(x.razao)===chaveNome(f.razao)
+        || chaveNome(x.nome)===chaveNome(f.razao);
+  });
+  if(jaTem) return;
+  var novo={ nome:f.razao, razao:f.razao, cnpj:f.cnpj||'', endereco:f.endereco||'',
+             municipio:f.municipio||'', pagamento:f.pagamento||'',
+             contato:'', vendedor:'', origem:'autorizacoes',
+             atualizadoEm:agora(), atualizadoPor:sessaoEmail };
+  addDoc(collection(dbC,'pecasFornecedores'), novo)
+    .then(function(r){ if(FORN_REG) FORN_REG.push(Object.assign({firestoreId:r.id}, novo)); })
+    .catch(function(e){ console.error('guardaFornecedorNovo:',e); });
+}
 
 function linhaItem(){
   return '<tr>'
@@ -780,8 +874,8 @@ window.abrirNovo=function(){
     return '<option value="'+esc(t.firestoreId)+'">'+esc(t.nome)+'</option>'; }).join('');
   var itens='';
   for(var i=0;i<5;i++) itens+=linhaItem();
-  var listaForn=carregaFornecedores().map(function(k){
-    return '<option value="'+esc(FORN[k].razao)+'">'; }).join('');
+  var listaForn=carregaFornecedores().map(function(r){
+    return '<option value="'+esc(r)+'">'; }).join('');
 
   modal({
     titulo:'Nova solicitação', wide:true,
@@ -796,9 +890,11 @@ window.abrirNovo=function(){
        +   '<div class="alert a-info" style="margin-bottom:12px">Dados do fornecedor — saem na folha impressa.</div>'
        +   '<div class="grid2">'
        +     '<div class="fld"><label>Razão social</label>'
-       +       '<input type="text" id="f-razao" list="forn-lista" autocomplete="off" oninput="autoFornecedor()">'
+       +       '<input type="text" id="f-razao" list="forn-lista" autocomplete="off" '
+       +         'placeholder="digite para buscar no cadastro" oninput="autoFornecedor()">'
+       +       '<div id="forn-ok" style="font-size:11.5px;margin-top:4px;min-height:15px"></div>'
        +       '<datalist id="forn-lista">'+listaForn+'</datalist></div>'
-       +     '<div class="fld"><label>CNPJ</label><input type="text" id="f-cnpj"></div>'
+       +     '<div class="fld"><label>CNPJ</label><input type="text" id="f-cnpj" autocomplete="off" oninput="autoFornecedor(\'cnpj\')"></div>'
        +     '<div class="fld"><label>Endereço</label><input type="text" id="f-end"></div>'
        +     '<div class="fld"><label>Município / UF</label><input type="text" id="f-mun"></div>'
        +     '<div class="fld"><label>Forma de pagamento</label><input type="text" id="f-pag" placeholder="30 dias, à vista…"></div>'
@@ -867,10 +963,12 @@ window.abrirNovo=function(){
       }
 
       addDoc(collection(dbC,'assinaturas'), dados)
+        .then(function(){ if(dados.fornecedor) guardaFornecedorNovo(dados.fornecedor); })
         .catch(function(e){ console.error('novo:',e); alert('Não foi possível enviar: '+(e.code||e.message)); });
     }
   });
   setTimeout(trocarModelo,30);
+  carregaCadastroForn().then(pintaListaForn);
 };
 
 window.trocarModelo=function(){
