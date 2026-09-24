@@ -127,7 +127,14 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .st-aprovado{color:var(--green);background:rgba(28,196,126,.13);border:1px solid rgba(28,196,126,.36)}
 .st-recusado{color:var(--red);background:rgba(242,106,106,.13);border:1px solid rgba(242,106,106,.36)}
 .st-pix{color:var(--purple);background:rgba(139,127,232,.15);border:1px solid rgba(139,127,232,.45)}
-.doc-pix{border-left-color:var(--purple)!important}
+/* pago = mesmo roxo, preenchido. Não usa verde: verde já é "aprovado". */
+.st-pixpago{color:#fff;background:var(--purple);border:1px solid var(--purple)}
+#box-chave{display:none;margin:-4px 0 13px}
+#box-chave.on{display:block}
+.pix-pago{display:flex;gap:10px;align-items:flex-start;border-radius:10px;padding:10px 13px;
+          margin-bottom:13px;font-size:13px;line-height:1.5;
+          background:rgba(139,127,232,.11);border:1px solid rgba(139,127,232,.4)}
+.doc-pendente.doc-pix{border-left-color:var(--purple)!important}
 .pix-fld{display:flex;align-items:center;gap:8px;background:rgba(139,127,232,.09);
          border:1px solid rgba(139,127,232,.32);border-radius:9px;padding:9px 12px;margin-bottom:13px}
 .pix-fld input{width:auto;flex:0 0 auto}
@@ -434,7 +441,12 @@ html[data-pal="vinho"][data-theme="light"]{
         </select>
         <select id="f-setor" onchange="render()"><option value="">Todos os setores</option></select>
         <select id="f-tipo" onchange="render()"><option value="">Todos os tipos</option></select>
-        <label class="chk"><input type="checkbox" id="f-pix" onchange="render()"> só Pix</label>
+        <select id="f-pix" onchange="render()">
+          <option value="">Pix: todos</option>
+          <option value="pix">Pix Comprovante</option>
+          <option value="apagar">Pix a pagar</option>
+          <option value="pago">Pix pago</option>
+        </select>
         <button class="btn btn-sm btn-ghost" onclick="exportarCSV()" style="margin-left:auto">⤓ CSV</button>
       </div>
       <div id="s-todas"></div>
@@ -580,24 +592,31 @@ function tituloAba(n){
    carga fica null de propósito: senão o app tocaria a cada login, para cada
    pendente que já existia. */
 var statusVistos=null;
+/* Para cada documento guarda o status e se ele está "a pagar". O financeiro
+   que não assina ganha aviso e contador próprios: o que ele precisa ver é o
+   Pix assinado esperando pagamento, não o pendente de assinatura. */
 function checaMudancas(){
-  var mapa={}, pendentes=0, novoPendente=0, meuResolvido=0;
+  var mapa={}, pendentes=0, aPagar=0, novoPendente=0, meuResolvido=0, novoAPagar=0;
+  var financeiroSo = ehFinanceiro && !podeAprovar;
   docs.forEach(function(d){
-    var st=d.status||'pendente';
-    mapa[d.firestoreId]=st;
+    var st=d.status||'pendente', ap=pixAPagar(d);
+    mapa[d.firestoreId]={st:st, ap:ap};
     if(st==='pendente') pendentes++;
+    if(ap) aPagar++;
     if(statusVistos){
       var antes=statusVistos[d.firestoreId];
-      if(st==='pendente' && antes===undefined) novoPendente++;
-      if(d.criadoPor===sessaoEmail && antes==='pendente' && st!=='pendente') meuResolvido++;
+      if(st==='pendente' && !antes) novoPendente++;
+      if(d.criadoPor===sessaoEmail && antes && antes.st==='pendente' && st!=='pendente') meuResolvido++;
+      if(ap && !(antes && antes.ap)) novoAPagar++;
     }
   });
   if(statusVistos){
-    if(podeAprovar && novoPendente>0) bip();          /* chegou para assinar */
-    else if(!podeAprovar && meuResolvido>0) bip();    /* o seu foi decidido */
+    if(podeAprovar && novoPendente>0) bip();              /* chegou para assinar */
+    else if(financeiroSo && novoAPagar>0) bip();          /* Pix liberado para pagar */
+    else if(!podeAprovar && meuResolvido>0) bip();        /* o seu foi decidido */
   }
   statusVistos=mapa;
-  tituloAba(podeAprovar?pendentes:0);
+  tituloAba(podeAprovar ? pendentes : (financeiroSo ? aPagar : 0));
 }
 
 var compacto=false;
@@ -782,6 +801,11 @@ window.abrirNovo=function(){
        +     '<div class="fld"><label>Forma de pagamento</label><input type="text" id="f-pag" placeholder="30 dias, à vista…"></div>'
        +     '<div class="fld"><label>Data de entrega</label><input type="text" id="f-ent" placeholder="dd/mm/aaaa ou prazo"></div>'
        +   '</div>'
+       +   '<div class="pix-fld"><input type="checkbox" id="n-pix" onchange="mostraChave()">'
+       +     '<label for="n-pix">Pix Comprovante</label></div>'
+       +   '<div id="box-chave" class="fld"><label>Chave Pix <span style="color:var(--red)">*</span></label>'
+       +     '<input type="text" id="n-chave" maxlength="140" autocomplete="off" '
+       +       'placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"></div>'
        +   '<label>Itens</label>'
        +   '<div class="tw" style="border-radius:10px"><table class="itens"><thead><tr>'
        +     '<th>Descrição do produto</th><th>Cód.</th><th>Qtde</th><th>Unit. (R$)</th><th class="r">Total</th>'
@@ -793,9 +817,7 @@ window.abrirNovo=function(){
        + '</div>'
        + '<div class="fld" style="margin-top:13px"><label id="lb-desc">Descrição / justificativa</label>'
        +   '<textarea id="n-desc" placeholder="o que é, por que precisa, para quem…"></textarea></div>'
-       + '<div class="fld"><label>Precisa até</label><input type="date" id="n-prazo"></div>'
-       + (ehAdmin?'<div class="pix-fld"><input type="checkbox" id="n-pix">'
-       +   '<label for="n-pix">Pix Comprovante — marcar para o financeiro</label></div>':''),
+       + '<div class="fld"><label>Precisa até</label><input type="date" id="n-prazo"></div>',
     ok:'Enviar para assinatura',
     onOk:function(){
       var tipoId=document.getElementById('n-tipo').value;
@@ -806,12 +828,17 @@ window.abrirNovo=function(){
       var desc=String(document.getElementById('n-desc').value||'').trim();
 
       if(!tit){ alert('Informe o título.'); return false; }
+      var marcouPix=!!(document.getElementById('n-pix')||{}).checked;
+      var chaveDig=String((document.getElementById('n-chave')||{}).value||'').trim();
+      if(marcouPix && !chaveDig){ alert('Informe a chave Pix — o financeiro precisa dela para pagar.'); return false; }
       if(!setor){ alert('Informe o setor.'); return false; }
 
       var dados={ tipo:(t?t.nome:''), tipoId:tipoId, modelo:modelo,
         setor:setor, titulo:tit, descricao:desc,
         prazo:String(document.getElementById('n-prazo').value||''),
         pix:!!(document.getElementById('n-pix')||{}).checked,
+        pixChave:(document.getElementById('n-pix')||{}).checked
+                 ? String((document.getElementById('n-chave')||{}).value||'').trim() : '',
         status:'pendente', criadoPor:sessaoEmail, criadoNome:sessaoNome, criadoEm:agora() };
 
       if(modelo==='compra'){
@@ -856,6 +883,13 @@ window.trocarModelo=function(){
 };
 window.mostrarValor=window.trocarModelo;   /* nome antigo, mantido */
 
+window.mostraChave=function(){
+  var on=!!(document.getElementById('n-pix')||{}).checked;
+  var b=document.getElementById('box-chave');
+  if(b) b.classList.toggle('on', on);
+  if(on){ var c=document.getElementById('n-chave'); if(c) c.focus(); }
+};
+
 /* ---- detalhes ----
    A diretoria assina olhando esta tela: no modelo de compra o cartão da lista
    mostra só o resumo, e ninguém deve autorizar valor sem ver de quem se está
@@ -868,15 +902,83 @@ function campo(rotulo, valor){
    do comprovante só aparece depois. Por isso alterna em qualquer status,
    inclusive já assinada: o documento não muda, só o aviso interno. */
 window.togglePix=function(id){
-  if(!ehAdmin){ alert('Só a diretoria marca Pix Comprovante.'); return; }
+  if(!ehAdmin){ alert('Só a diretoria marca Pix Comprovante depois de criada.'); return; }
   var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
   if(!d) return;
-  var novo=!d.pix;
-  updateDoc(doc(dbC,'assinaturas',id), { pix:novo })
-    .then(function(){ d.pix=novo; render(); detalhes(id); })
-    .catch(function(e){ console.error('pix:',e);
-      alert('Não foi possível alterar: '+(e.code||e.message)); });
+
+  function grava(dados){
+    updateDoc(doc(dbC,'assinaturas',id), dados)
+      .then(function(){ Object.assign(d,dados); render(); detalhes(id); })
+      .catch(function(e){ console.error('pix:',e);
+        alert('Não foi possível alterar: '+(e.code||e.message)); });
+  }
+
+  if(d.pix){
+    if(d.pixPago){ alert('O financeiro já confirmou este Pix. Desfaça a confirmação antes.'); return; }
+    grava({ pix:false });
+    return;
+  }
+  /* marcar exige a chave, pelo mesmo motivo do formulário */
+  modal({
+    titulo:'Marcar Pix Comprovante', sub:esc(d.titulo||''),
+    body:'<div class="fld"><label>Chave Pix <span style="color:var(--red)">*</span></label>'
+       + '<input type="text" id="t-chave" maxlength="140" autocomplete="off" value="'+esc(d.pixChave||'')+'" '
+       + 'placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"></div>',
+    ok:'Marcar',
+    onOk:function(){
+      var c=String((document.getElementById('t-chave')||{}).value||'').trim();
+      if(!c){ alert('Informe a chave Pix.'); return false; }
+      grava({ pix:true, pixChave:c });
+    }
+  });
 };
+
+/* ---- 2ª etapa: o financeiro confirma que pagou ----
+   Só vale para autorização já assinada: pagar antes da assinatura é
+   justamente o que a autorização existe para impedir. */
+function podeConfirmarPix(){ return ehAdmin || ehFinanceiro; }
+
+window.confirmarPix=function(id){
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d || !d.pix) return;
+  if(!podeConfirmarPix()){ alert('Só o financeiro confirma pagamento.'); return; }
+  if(d.status!=='aprovado'){ alert('Só dá para confirmar o Pix de autorização já assinada.'); return; }
+  modal({
+    titulo:'Confirmar Pix efetuado', sub:esc(d.titulo||''),
+    body:'<div class="det">'
+       +   campo('Valor', fmtR$(d.valor))
+       +   campo('Chave Pix', d.pixChave||'—')
+       +   campo('Favorecido', (d.fornecedor&&d.fornecedor.razao)||'—')
+       + '</div>'
+       + '<div class="fld"><label>ID da transação ou observação</label>'
+       + '<input type="text" id="c-obs" maxlength="160" autocomplete="off" '
+       + 'placeholder="opcional — o código E2E do comprovante ajuda a achar depois"></div>',
+    ok:'Confirmar pagamento',
+    onOk:function(){
+      var dados={ pixPago:true, pixPagoEm:agora(), pixPagoPor:sessaoEmail,
+                  pixPagoNome:sessaoNome,
+                  pixPagoObs:String((document.getElementById('c-obs')||{}).value||'').trim() };
+      updateDoc(doc(dbC,'assinaturas',id), dados)
+        .then(function(){ Object.assign(d,dados); render(); detalhes(id); })
+        .catch(function(e){ console.error('confirmarPix:',e);
+          alert('Não foi possível confirmar: '+(e.code||e.message)); });
+    }
+  });
+};
+
+window.desfazerPix=function(id){
+  if(!ehAdmin){ alert('Só a diretoria desfaz confirmação de pagamento.'); return; }
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d) return;
+  if(!confirm('Desfazer a confirmação do Pix? O registro de quem confirmou será apagado.')) return;
+  var dados={ pixPago:false, pixPagoEm:'', pixPagoPor:'', pixPagoNome:'', pixPagoObs:'' };
+  updateDoc(doc(dbC,'assinaturas',id), dados)
+    .then(function(){ Object.assign(d,dados); render(); detalhes(id); })
+    .catch(function(e){ console.error('desfazerPix:',e);
+      alert('Não foi possível desfazer: '+(e.code||e.message)); });
+};
+
+function pixAPagar(d){ return !!d.pix && (d.status||'pendente')==='aprovado' && !d.pixPago; }
 
 window.detalhes=function(id){
   var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
@@ -887,7 +989,14 @@ window.detalhes=function(id){
 
   var b=(d.pix?'<div class="alert" style="color:var(--purple);'
     + 'background:rgba(139,127,232,.11);border:1px solid rgba(139,127,232,.4)">'
-    + 'Pix Comprovante — marcado para o financeiro</div>':'')
+    + 'Pix Comprovante — marcado para o financeiro'
+    + (d.pixChave?' · chave <b class="mono">'+esc(d.pixChave)+'</b>':'')+'</div>':'')
+    + (d.pix && d.pixPago
+        ? '<div class="pix-pago"><div>✓</div><div><b>Pix pago</b> por '+esc(d.pixPagoNome||d.pixPagoPor||'')
+          + ' em '+esc(dataBR(d.pixPagoEm))+' às '+esc(horaBR(d.pixPagoEm))
+          + (d.pixPagoObs?'<br><span style="color:var(--muted)">'+esc(d.pixPagoObs)+'</span>':'')
+          + '</div></div>'
+        : '')
     + '<div class="det">'
     + campo('Status', st)
     + campo('Tipo', d.tipo)
@@ -940,6 +1049,13 @@ window.detalhes=function(id){
   if(st==='recusado') b+='<div class="doc-rec">Recusado: '+esc(d.motivoRecusa||'')+'</div>';
 
   var extra='';
+  if(d.pix && st==='aprovado' && !d.pixPago && podeConfirmarPix()){
+    extra+='<button class="btn btn-sm" style="background:var(--purple)" '
+      + 'onclick="confirmarPix(\''+esc(id)+'\')">Confirmar Pix efetuado</button>';
+  }
+  if(d.pix && d.pixPago && ehAdmin){
+    extra+='<button class="btn btn-sm btn-ghost" onclick="desfazerPix(\''+esc(id)+'\')">Desfazer pagamento</button>';
+  }
   if(ehAdmin){
     extra+='<button class="btn btn-sm btn-ghost" style="margin-right:auto;'
       + 'color:var(--purple);border-color:var(--purple)" '
@@ -1184,7 +1300,9 @@ function cartao(d, comAcoes){
   var h='<div class="doc doc-'+st+(d.pix?' doc-pix':'')+'"><div class="doc-top"><div>'
    + '<span class="doc-tit">'+esc(d.titulo||'—')+'</span>'
    + '<span class="doc-st st-'+st+'">'+st+'</span>'
-   + (d.pix?'<span class="doc-st st-pix">Pix Comprovante</span>':'')+'</div>'
+   + (d.pix?(d.pixPago
+        ? '<span class="doc-st st-pixpago">Pix Pago</span>'
+        : '<span class="doc-st st-pix">Pix Comprovante</span>'):'')+'</div>'
    + '<div class="doc-meta">'+esc(dataBR(d.criadoEm))+'</div></div>'
    + '<div style="margin:8px 0"><span class="tag">'+esc(d.tipo||'—')+'</span>'
    +   '<span class="tag">'+esc(d.setor||'—')+'</span>'
@@ -1267,9 +1385,11 @@ function render(){
     encher('f-setor','Todos os setores',Object.keys(setores).sort());
     encher('f-tipo','Todos os tipos',Object.keys(tps).sort());
 
-    var soPix=!!(document.getElementById('f-pix')||{}).checked;
+    var fp=(document.getElementById('f-pix')||{}).value||'';
     var l=docs.filter(function(d){
-      if(soPix && !d.pix) return false;
+      if(fp==='pix'    && !d.pix) return false;
+      if(fp==='apagar' && !pixAPagar(d)) return false;
+      if(fp==='pago'   && !(d.pix && d.pixPago)) return false;
       if(st && (d.status||'pendente')!==st) return false;
       if(se && d.setor!==se) return false;
       if(ti && d.tipo!==ti) return false;
@@ -1288,9 +1408,9 @@ function render(){
       + '<div class="card"><div class="klabel">Pendentes</div><div class="kval" style="color:var(--amber)">'
       +   l.filter(function(d){ return (d.status||'pendente')==='pendente'; }).length+'</div>'
       +   '<div class="khint">aguardando assinatura</div></div>'
-      + '<div class="card"><div class="klabel">Marcadas Pix</div><div class="kval" style="color:var(--purple)">'
-      +   l.filter(function(d){ return !!d.pix; }).length+'</div>'
-      +   '<div class="khint">para o financeiro</div></div>'
+      + '<div class="card"><div class="klabel">Pix a pagar</div><div class="kval" style="color:var(--purple)">'
+      +   l.filter(pixAPagar).length+'</div>'
+      +   '<div class="khint">assinadas, aguardando pagamento</div></div>'
       + '</div>'
       + (l.length ? l.map(function(d){ return cartao(d,false); }).join('')
                   : '<div class="card empty">Nenhum documento com esses filtros.</div>');
@@ -1319,9 +1439,10 @@ function encher(id, vazio, itens){
 }
 
 window.exportarCSV=function(){
-  var l=['Codigo;Status;Pix;Tipo;Setor;Titulo;Valor;Solicitante;Criado;Assinado por;Assinado em'];
+  var l=['Codigo;Status;Pix;Chave Pix;Pix pago em;Pix pago por;Tipo;Setor;Titulo;Valor;Solicitante;Criado;Assinado por;Assinado em'];
   docs.forEach(function(d){
-    l.push([d.codigo||'', d.status||'', (d.pix?'SIM':''), d.tipo||'', d.setor||'', (d.titulo||'').replace(/;/g,','),
+    l.push([d.codigo||'', d.status||'', (d.pix?'SIM':''), (d.pixChave||'').replace(/;/g,','),
+      (d.pixPago?dataBR(d.pixPagoEm):''), (d.pixPago?(d.pixPagoPor||''):''), d.tipo||'', d.setor||'', (d.titulo||'').replace(/;/g,','),
       num(d.valor).toFixed(2).replace('.',','), d.criadoNome||d.criadoPor||'',
       dataBR(d.criadoEm), d.aprovadoPor||'', d.aprovadoEm?dataBR(d.aprovadoEm):''].join(';'));
   });
