@@ -1182,7 +1182,10 @@ window.detalhes=function(id){
       + '<div class="tw" style="border-radius:10px"><table style="font-size:13px"><thead><tr>'
       +   '<th></th><th>Descrição</th><th class="r">Qtde</th><th class="r">Unit.</th><th class="r">Total</th>'
       + '</tr></thead><tbody>'+(linhas||'<tr><td colspan="5" class="empty">Sem itens</td></tr>')+'</tbody></table></div>'
-      + '<div class="it-soma" style="margin:10px 0 13px">Valor total: <b>'+fmtR$(total)+'</b></div>';
+      + (temFreteDoc(d)
+          ? '<div class="it-soma" style="margin:10px 0 2px;color:var(--muted)">Subtotal dos itens: '+fmtR$(total)
+            + ' · Frete: '+(num(d.frete)>0?fmtR$(num(d.frete)):'sem frete')+'</div>' : '')
+      + '<div class="it-soma" style="margin:'+(temFreteDoc(d)?'4px':'10px')+' 0 13px">Valor total: <b>'+fmtR$(total+(temFreteDoc(d)?num(d.frete):0))+'</b></div>';
   }else if(num(d.valor)>0){
     b+='<div class="it-soma" style="margin:0 0 13px">Valor: <b>'+fmtR$(d.valor)+'</b></div>';
   }
@@ -1241,6 +1244,8 @@ window.detalhes=function(id){
    por isso vai num writeBatch: ou os dois gravam, ou nenhum. Se quem assina
    não tiver permissão no Peças, nada é assinado — melhor do que uma
    autorização aprovada com o pedido ainda parado do outro lado. */
+/* Frete só existe nas autorizações que vêm do Peças; as comuns não têm o campo. */
+function temFreteDoc(d){ return !!d && d.frete!=null && d.frete!==''; }
 function deOrigemPecas(d){ return !!(d && d.origem && d.origem.app==='pecas' && d.origem.pedidoId); }
 
 function gravaComPedido(id, d, dadosAut, dadosPedido, rotulo){
@@ -1386,8 +1391,11 @@ function folhaCompra(d){
     +   '<th style="width:8%">ITEM</th><th style="width:10%">QTDE</th>'
     +   '<th>DESCRIÇÃO DO PRODUTO</th><th style="width:15%">UNIT (R$)</th><th style="width:15%">TOTAL (R$)</th>'
     + '</tr></thead><tbody>'+linhas+vazias+'</tbody>'
-    + '<tfoot><tr><td colspan="4" class="r"><b>VALOR TOTAL:</b></td>'
-    +   '<td class="r"><b>'+(total>0?fmtN(total,2):'—')+'</b></td></tr></tfoot></table>'
+    + '<tfoot>'
+    +   (temFreteDoc(d)?'<tr><td colspan="4" class="r"><b>FRETE:</b></td>'
+    +     '<td class="r">'+(num(d.frete)>0?fmtN(num(d.frete),2):'—')+'</td></tr>':'')
+    +   '<tr><td colspan="4" class="r"><b>VALOR TOTAL:</b></td>'
+    +   '<td class="r"><b>'+((total+(temFreteDoc(d)?num(d.frete):0))>0?fmtN(total+(temFreteDoc(d)?num(d.frete):0),2):'—')+'</b></td></tr></tfoot></table>'
     + '<div class="au-obs"><b>OBSERVAÇÃO:</b><br>'+esc(d.descricao||'')
     +   pixNaFolha(d, !!d.descricao)
     +   (d.obsAprovacao?'\n\nDiretoria: '+esc(d.obsAprovacao):'')+'</div>'
