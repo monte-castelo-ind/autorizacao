@@ -1361,6 +1361,29 @@ window.recusar=function(id){
 /* O carimbo puxa data, hora e quem assinou do próprio sistema — é isso que
    dá rastro ao documento, mais do que o desenho da assinatura. O código de
    verificação sai junto, para conferência em Verificar código. */
+/* A firma usa uma fonte da internet (Mrs Saint Delafield), e o navegador só a
+   baixa quando algo na tela precisa dela. Imprimir com espera fixa fazia a
+   primeira impressão sair com a fonte substituta, grossa: a "foto" da página
+   era tirada antes de a fonte chegar. Agora a impressão espera a fonte — com
+   limite, para sem internet ainda imprimir. Ela também é pedida na abertura
+   do app, para quase sempre já estar pronta no primeiro clique. */
+function imprimirComFonte(){
+  var foi=false;
+  function vai(){ if(foi) return; foi=true; window.print(); }
+  try{
+    if(document.fonts && document.fonts.load){
+      Promise.all([document.fonts.load('44px "Mrs Saint Delafield"'), document.fonts.ready])
+        .then(function(){ setTimeout(vai,60); }, vai);
+      setTimeout(vai,2500);
+      return;
+    }
+  }catch(e){}
+  setTimeout(vai,140);
+}
+window.addEventListener('load', function(){
+  try{ if(document.fonts && document.fonts.load) document.fonts.load('44px "Mrs Saint Delafield"').catch(function(){}); }catch(e){}
+});
+
 function blocoAssinatura(d){
   var dia=dataBR(d.aprovadoEm), hora=horaBR(d.aprovadoEm);
   return '<div class="au-ass">'
@@ -1388,8 +1411,8 @@ function folhaCompra(d){
     var tot=num(it.precoUn)*num(it.qtd);
     return '<tr><td class="c">'+(i+1)+'</td><td class="c">'+fmtN(num(it.qtd),0)+'</td>'
       + '<td>'+esc(it.nome||'')+(it.codigo?' (cód '+esc(it.codigo)+')':'')+'</td>'
-      + '<td class="r">'+(num(it.precoUn)>0?fmtN(num(it.precoUn),2):'—')+'</td>'
-      + '<td class="r">'+(tot>0?fmtN(tot,2):'—')+'</td></tr>';
+      + '<td class="r">'+(num(it.precoUn)>0?'R$&nbsp;'+fmtN(num(it.precoUn),2):'—')+'</td>'
+      + '<td class="r">'+(tot>0?'R$&nbsp;'+fmtN(tot,2):'—')+'</td></tr>';
   }).join('');
   var vazias='';   /* linhas em branco para a folha manter o corpo do modelo */
   /* As linhas em branco só completam o corpo do modelo: cada item ocupa uma
@@ -1420,13 +1443,13 @@ function folhaCompra(d){
     + '</table>'
     + '<table class="au-itens"><thead><tr>'
     +   '<th style="width:8%">ITEM</th><th style="width:10%">QTDE</th>'
-    +   '<th>DESCRIÇÃO DO PRODUTO</th><th style="width:15%">UNIT (R$)</th><th style="width:15%">TOTAL (R$)</th>'
+    +   '<th>DESCRIÇÃO DO PRODUTO</th><th style="width:16%">UNIT.</th><th style="width:16%">TOTAL</th>'
     + '</tr></thead><tbody>'+linhas+vazias+'</tbody>'
     + '<tfoot>'
     +   (temFreteDoc(d)?'<tr><td colspan="4" class="r"><b>FRETE:</b></td>'
-    +     '<td class="r">'+(num(d.frete)>0?fmtN(num(d.frete),2):'—')+'</td></tr>':'')
+    +     '<td class="r">'+(num(d.frete)>0?'R$&nbsp;'+fmtN(num(d.frete),2):'—')+'</td></tr>':'')
     +   '<tr><td colspan="4" class="r"><b>VALOR TOTAL:</b></td>'
-    +   '<td class="r"><b>'+((total+(temFreteDoc(d)?num(d.frete):0))>0?fmtN(total+(temFreteDoc(d)?num(d.frete):0),2):'—')+'</b></td></tr></tfoot></table>'
+    +   '<td class="r"><b>'+((total+(temFreteDoc(d)?num(d.frete):0))>0?'R$&nbsp;'+fmtN(total+(temFreteDoc(d)?num(d.frete):0),2):'—')+'</b></td></tr></tfoot></table>'
     + '<div class="au-obs"><b>OBSERVAÇÃO:</b><br>'+esc(d.descricao||'')
     +   pixNaFolha(d, !!d.descricao)
     +   (d.obsAprovacao?'\n\nDiretoria: '+esc(d.obsAprovacao):'')+'</div>'
@@ -1474,7 +1497,7 @@ window.imprimir=function(id){
     (d.modelo==='compra') ? folhaCompra(d) : folhaSimples(d);
 
   window.scrollTo(0,0);
-  setTimeout(function(){ window.print(); },140);
+  imprimirComFonte();
 };
 
 /* ---- verificação ---- */
