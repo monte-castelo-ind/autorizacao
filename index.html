@@ -120,6 +120,7 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .doc-aprovado{border-left-color:var(--green)}
 .doc-recusado{border-left-color:var(--red);opacity:.76}
 .doc-cancelado{border-left-color:var(--muted);opacity:.62}
+.doc-devolvido{border-left-color:var(--blue);opacity:.72}
 .doc-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .doc-tit{font-size:15.5px;font-weight:700;letter-spacing:-.2px}
 .doc-st{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
@@ -128,6 +129,7 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .st-aprovado{color:var(--green);background:rgba(28,196,126,.13);border:1px solid rgba(28,196,126,.36)}
 .st-recusado{color:var(--red);background:rgba(242,106,106,.13);border:1px solid rgba(242,106,106,.36)}
 .st-cancelado{color:var(--muted);background:transparent;border:1px solid var(--border)}
+.st-devolvido{color:var(--blue);background:transparent;border:1px solid var(--blue)}
 .tag-origem{color:var(--blue);border-color:var(--blue)}
 .st-pix{color:var(--purple);background:rgba(139,127,232,.15);border:1px solid rgba(139,127,232,.45)}
 /* pago = mesmo roxo, preenchido. Não usa verde: verde já é "aprovado". */
@@ -449,6 +451,7 @@ html[data-pal="vinho"][data-theme="light"]{
           <option value="aprovado">Aprovadas</option>
           <option value="recusado">Recusadas</option>
           <option value="cancelado">Canceladas</option>
+          <option value="devolvido">Devolvidas ao financeiro</option>
         </select>
       </div>
       <div id="s-meus"></div>
@@ -465,6 +468,7 @@ html[data-pal="vinho"][data-theme="light"]{
           <option value="aprovado">Aprovadas</option>
           <option value="recusado">Recusadas</option>
           <option value="cancelado">Canceladas</option>
+          <option value="devolvido">Devolvidas ao financeiro</option>
         </select>
         <select id="f-setor" onchange="render()"><option value="">Todos os setores</option></select>
         <select id="f-tipo" onchange="render()"><option value="">Todos os tipos</option></select>
@@ -1228,6 +1232,7 @@ window.detalhes=function(id){
   }
   if(st==='pendente' && podeAprovar){
     extra+='<button class="btn btn-sm" onclick="assinar(\''+esc(id)+'\')">Assinar</button>'
+        + (deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\''+esc(id)+'\')">↩ Devolver ao financeiro</button>':'')
         + '<button class="btn btn-sm btn-ghost" onclick="recusar(\''+esc(id)+'\')">Recusar</button>';
   }else if(st==='aprovado'){
     extra+='<button class="btn btn-sm btn-ghost" onclick="imprimir(\''+esc(id)+'\')">⎙ Imprimir / PDF</button>';
@@ -1267,6 +1272,32 @@ function gravaComPedido(id, d, dadosAut, dadosPedido, rotulo){
   });
   return pr;
 }
+
+/* ---- devolver ao financeiro ----
+   Só para autorização que veio do Peças e ainda espera assinatura. Não é
+   recusa: o pedido volta para o financeiro corrigir e reenviar, e aí nasce
+   uma autorização nova. Esta fica no histórico como "devolvida", com o motivo. */
+window.devolverFin=function(id){
+  if(!podeAprovar) return;
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d || !deOrigemPecas(d)) return;
+  if((d.status||'pendente')!=='pendente'){ alert('Só dá para devolver o que ainda espera assinatura.'); return; }
+  modal({
+    titulo:'Devolver ao financeiro', sub:esc(d.titulo||''),
+    body:'<div class="alert a-info">O pedido volta para o financeiro corrigir e reenviar. '
+       + 'Esta autorização sai da sua fila e fica no histórico como <b>devolvida</b>.</div>'
+       + '<div class="fld"><label>O que precisa ser revisto</label>'
+       + '<input type="text" id="dv-mot" maxlength="180" placeholder="falta cotação, frete fora do campo, preço acima do combinado…"></div>',
+    ok:'Devolver',
+    onOk:function(){
+      var m=String((document.getElementById('dv-mot')||{}).value||'').trim();
+      if(!m){ alert('Diga o que precisa ser revisto — é o que o financeiro vai ler.'); return false; }
+      var r={ motivoDevolucao:m, devolvidoPor:sessaoEmail, devolvidoNome:sessaoNome, devolvidoEm:agora() };
+      gravaComPedido(id, d, Object.assign({status:'devolvido'}, r),
+                            Object.assign({status:'aguardando_fin'}, r), 'devolver');
+    }
+  });
+};
 
 /* ---- assinar ---- */
 window.assinar=function(id){
@@ -1542,11 +1573,16 @@ function cartao(d, comAcoes){
     if(d.obsAprovacao) h+='<div class="doc-desc" style="font-style:italic">'+esc(d.obsAprovacao)+'</div>';
   }
   if(st==='recusado') h+='<div class="doc-rec">Recusado: '+esc(d.motivoRecusa||'')+'</div>';
+  if(st==='devolvido') h+='<div class="doc-rec" style="color:var(--blue);background:var(--card-2)">↩ Devolvido ao financeiro'
+     +(d.devolvidoNome?' por '+esc(d.devolvidoNome):'')
+     +(d.devolvidoEm?' em '+esc(dataBR(d.devolvidoEm)):'')
+     +(d.motivoDevolucao?': '+esc(d.motivoDevolucao):'')+'</div>';
   if(st==='cancelado') h+='<div class="doc-rec" style="color:var(--muted);background:var(--card-2)">Cancelado'
      +(d.motivoCancelamento?': '+esc(d.motivoCancelamento):'')+'</div>';
   h+='<div class="doc-btns">';
   if(comAcoes && st==='pendente' && podeAprovar){
     h+='<button class="btn btn-sm" onclick="assinar(\'' + esc(d.firestoreId) + '\')">Assinar</button>'
+     + (deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\'' + esc(d.firestoreId) + '\')">↩ Devolver ao financeiro</button>':'')
      + '<button class="btn btn-sm btn-ghost" onclick="recusar(\'' + esc(d.firestoreId) + '\')">Recusar</button>';
   }
   if(st==='aprovado')
