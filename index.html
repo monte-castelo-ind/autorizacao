@@ -221,6 +221,10 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 }
 /* rótulos do menu: longo no computador, curto na barra de abas do celular */
 .lab-m{display:none}
+/* etiquetas do cartão: uma linha só; o que não couber vira "+N" (compactaTags) */
+.doc-tags{display:flex;flex-wrap:nowrap;gap:6px;margin:8px 0;overflow:hidden;align-items:center}
+.doc-tags .tag{flex:0 0 auto;margin:0;white-space:nowrap}
+.doc-tags .tag-mais{flex:0 0 auto;font-weight:700}
 #topo-m{display:none}
 .nav-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;
            background:var(--red);color:#fff;font-size:11px;font-weight:700;display:inline-flex;
@@ -1630,7 +1634,7 @@ function cartao(d, comAcoes){
                 : '<span class="doc-st st-pix">Pix Comprovante</span>'))
         : '')+'</div>'
    + '<div class="doc-meta">'+esc(dataBR(d.criadoEm))+'</div></div>'
-   + '<div style="margin:8px 0"><span class="tag">'+esc(d.tipo||'—')+'</span>'
+   + '<div class="doc-tags"><span class="tag">'+esc(d.tipo||'—')+'</span>'
    +   (deOrigemPecas(d)?'<span class="tag tag-origem">App de Peças</span>':'')
    +   '<span class="tag">'+esc(d.setor||'—')+'</span>'
    +   '<span class="tag">'+esc(d.criadoNome||d.criadoPor||'')+'</span>'
@@ -1680,6 +1684,31 @@ function dentroDaJanela(d){
 function aviso(){
   return erroLista ? '<div class="alert a-warn">▲ '+esc(erroLista)+'</div>' : '';
 }
+
+/* Mede na tela de quem está usando: no computador cabe tudo e nada muda; no
+   celular, as últimas etiquetas viram "+1", "+2"… O detalhe continua
+   mostrando tudo. A primeira etiqueta (o tipo) nunca some. */
+function compactaTags(){
+  document.querySelectorAll('.doc-tags').forEach(function(box){
+    var velho=box.querySelector('.tag-mais'); if(velho) velho.remove();
+    var tags=[].slice.call(box.querySelectorAll('.tag'));
+    tags.forEach(function(t){ t.style.display=''; });
+    if(box.scrollWidth<=box.clientWidth+1) return;
+    var mais=document.createElement('span');
+    mais.className='tag tag-mais';
+    box.appendChild(mais);
+    var escondidas=[];
+    for(var i=tags.length-1; i>=1; i--){
+      tags[i].style.display='none';
+      escondidas.unshift(tags[i].textContent);
+      mais.textContent='+'+escondidas.length;
+      mais.title=escondidas.join(' · ');
+      if(box.scrollWidth<=box.clientWidth+1) break;
+    }
+  });
+}
+var _tagsTimer=null;
+window.addEventListener('resize', function(){ clearTimeout(_tagsTimer); _tagsTimer=setTimeout(compactaTags,120); });
 
 function render(){
   if(!ativo) return;
@@ -1761,6 +1790,7 @@ function render(){
           }).join('') + '</tbody></table></div>'
       : '<div class="card empty">Nenhum tipo cadastrado. Crie o primeiro para os setores poderem solicitar.</div>';
   }
+  compactaTags();   /* depois que tudo foi desenhado */
 }
 window.render=render;
 
