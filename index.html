@@ -2,7 +2,7 @@
 <html lang="pt-BR" data-theme="dark">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Autorizações · Monte Castelo</title>
 <script>try{var _t=localStorage.getItem('mc_gestao_theme');if(_t==='dark'||_t==='light')document.documentElement.setAttribute('data-theme',_t);}catch(e){}
 /* Paleta padrão da Monte Castelo: preto industrial e laranja da marca.
@@ -219,6 +219,52 @@ td{padding:9px;border-bottom:1px solid var(--border)}
   .navbtn{width:auto;white-space:nowrap} .brand,.brand-cap,.side-foot{display:none}
   main{margin-left:0;padding:18px 15px 50px}
 }
+/* rótulos do menu: longo no computador, curto na barra de abas do celular */
+.lab-m{display:none}
+#topo-m{display:none}
+.nav-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;
+           background:var(--red);color:#fff;font-size:11px;font-weight:700;display:inline-flex;
+           align-items:center;justify-content:center}
+.nav-badge[hidden]{display:none}
+
+/* ===== CELULAR =====
+   Só abaixo de 600px, então computador e tablet não mudam. A fila vira lista,
+   tocar na linha abre o detalhe, e todas as ações acontecem lá. As janelas
+   viram folhas que sobem de baixo, com o botão principal largo e em cima. */
+@media(max-width:600px){
+  nav{position:fixed;left:0;right:0;bottom:0;top:auto;width:auto;height:auto;z-index:800;
+      flex-direction:row;overflow:visible;gap:2px;justify-content:space-around;
+      padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));
+      border-right:none;border-top:1px solid var(--border);background:var(--sidebar)}
+  .brand,.brand-cap,.side-foot{display:none}
+  .navbtn{flex:1 1 0;min-width:0;flex-direction:column;justify-content:center;gap:2px;min-height:50px;
+          padding:4px 2px;font-size:11px;border-radius:10px;position:relative}
+  .navbtn .side-ico{font-size:19px;width:auto}
+  .navbtn.on{background:transparent;color:var(--primary)}
+  .navbtn[data-p="tipos"]{display:none!important}
+  .lab-d{display:none}
+  .lab-m{display:inline}
+  .nav-badge{position:absolute;top:2px;left:calc(50% + 6px);margin:0}
+  main{margin-left:0;padding:calc(10px + env(safe-area-inset-top,0px)) 14px calc(86px + env(safe-area-inset-bottom,0px))}
+  #topo-m{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+  #topo-m .tm-marca{flex:1;font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  #ptit{font-size:30px}
+
+  .doc{position:relative;padding:14px 16px;border-radius:14px}
+  .doc .doc-btns{margin:0}
+  .doc .doc-btns > *:not(.b-det){display:none}
+  .doc .b-det{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;border-radius:14px;z-index:1}
+
+  .mask{align-items:flex-end;padding:0}
+  .modal,.modal.wide{max-width:none;width:100%;max-height:94vh;border-radius:18px 18px 0 0;border-bottom:none}
+  .mbody{padding:14px 16px}
+  .mfoot{padding:12px 14px calc(12px + env(safe-area-inset-bottom,0px));gap:8px}
+  .mfoot .btn{flex:1 1 calc(50% - 4px);min-height:46px;justify-content:center;font-size:14.5px;margin:0!important}
+  .mfoot .btn:not(.btn-ghost){flex-basis:100%;order:-1;min-height:52px;font-size:16px}
+
+  /* o botão "⌂ Apps" do app instalado sobe para não cobrir a barra de abas */
+  #mc-voltar-hub{bottom:calc(76px + env(safe-area-inset-bottom,0px))!important}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
 /* ---- impressão ---- */
@@ -409,10 +455,10 @@ html[data-pal="vinho"][data-theme="light"]{
   <nav>
     <div class="brand" role="img" aria-label="Monte Castelo"></div>
     <div class="brand-cap">Autorizações</div>
-    <button class="navbtn on" data-p="meus" onclick="nav('meus')"><span class="side-ico">▤</span><span>Minhas solicitações</span></button>
-    <button class="navbtn aprova-only" data-p="fila" onclick="nav('fila')"><span class="side-ico">✍</span><span>Para assinar</span></button>
-    <button class="navbtn fin-only" data-p="todas" onclick="nav('todas')"><span class="side-ico">▦</span><span>Todas</span></button>
-    <button class="navbtn fin-only" data-p="verificar" onclick="nav('verificar')"><span class="side-ico">◎</span><span>Verificar código</span></button>
+    <button class="navbtn on" data-p="meus" onclick="nav('meus')"><span class="side-ico">▤</span><span class="lab-d">Minhas solicitações</span><span class="lab-m">Minhas</span></button>
+    <button class="navbtn aprova-only" data-p="fila" onclick="nav('fila')"><span class="side-ico">✍</span><span class="lab-d">Para assinar</span><span class="lab-m">Assinar</span><span class="nav-badge" id="nav-badge" hidden></span></button>
+    <button class="navbtn fin-only" data-p="todas" onclick="nav('todas')"><span class="side-ico">▦</span><span class="lab-d">Todas</span><span class="lab-m">Todas</span></button>
+    <button class="navbtn fin-only" data-p="verificar" onclick="nav('verificar')"><span class="side-ico">◎</span><span class="lab-d">Verificar código</span><span class="lab-m">Verificar</span></button>
     <button class="navbtn admin-only" data-p="tipos" onclick="nav('tipos')"><span class="side-ico">◇</span><span>Tipos</span></button>
     <div class="side-foot">
       <div class="uline"><div class="uav" id="uav">?</div>
@@ -439,6 +485,11 @@ html[data-pal="vinho"][data-theme="light"]{
   </nav>
 
   <main>
+    <div id="topo-m">
+      <span class="tm-marca">Monte Castelo · Autorizações</span>
+      <button class="btn btn-sm btn-ghost" onclick="tema()" aria-label="Tema claro ou escuro">◐</button>
+      <button class="btn btn-sm btn-ghost" onclick="sair()">Sair</button>
+    </div>
     <h1 id="ptit">—</h1>
     <div class="psub" id="psub">—</div>
 
@@ -617,6 +668,8 @@ window.som=function(){
 var TITULO_BASE='Autorizações · Monte Castelo';
 function tituloAba(n){
   document.title = (n>0 ? '('+n+') ' : '') + TITULO_BASE;
+  var b=document.getElementById('nav-badge');
+  if(b){ b.textContent = n>99 ? '99+' : String(n); b.hidden = !(n>0 && podeAprovar); }
 }
 
 /* Guarda o status de cada documento entre um snapshot e outro. Na primeira
@@ -1231,7 +1284,7 @@ window.detalhes=function(id){
       + (d.pix?'Desmarcar Pix Comprovante':'Marcar Pix Comprovante')+'</button>';
   }
   if(st==='pendente' && podeAprovar){
-    extra+='<button class="btn btn-sm" onclick="assinar(\''+esc(id)+'\')">Assinar</button>'
+    extra+='<button class="btn btn-sm" onclick="assinar(\''+esc(id)+'\')">Assinar'+(num(d.valor)>0?' · '+fmtR$(d.valor):'')+'</button>'
         + (deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\''+esc(id)+'\')">↩ Devolver ao financeiro</button>':'')
         + '<button class="btn btn-sm btn-ghost" onclick="recusar(\''+esc(id)+'\')">Recusar</button>';
   }else if(st==='aprovado'){
@@ -1610,7 +1663,7 @@ function cartao(d, comAcoes){
   }
   if(st==='aprovado')
     h+='<button class="btn btn-sm btn-ghost" onclick="imprimir(\'' + esc(d.firestoreId) + '\')">⎙ Imprimir / PDF</button>';
-  h+='<button class="btn btn-sm btn-ghost" onclick="detalhes(\''+esc(d.firestoreId)+'\')">Ver detalhes</button>';
+  h+='<button class="btn btn-sm btn-ghost b-det" onclick="detalhes(\''+esc(d.firestoreId)+'\')">Ver detalhes</button>';
   h+='</div></div>';
   return h;
 }
