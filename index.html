@@ -154,6 +154,7 @@ td{padding:9px;border-bottom:1px solid var(--border)}
          background:rgba(75,123,236,.11);border:1px solid rgba(75,123,236,.3);
          border-radius:7px;padding:3px 9px;display:inline-block}
 .doc-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}
+.so-cel{display:none}
 .doc-rec{font-size:12px;color:var(--red);background:rgba(242,106,106,.08);border-radius:8px;
          padding:7px 11px;margin-top:9px}
 .tag{font-size:11px;color:var(--muted);background:var(--card-2);border:1px solid var(--border);
@@ -276,6 +277,7 @@ td{padding:9px;border-bottom:1px solid var(--border)}
   .doc .doc-btns{margin:0}
   .doc .doc-btns > *:not(.b-det){display:none}
   .doc .b-det{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;border-radius:14px;z-index:1}
+  .so-cel{display:inline!important}
 
   .mask{align-items:flex-end;padding:0}
   .modal,.modal.wide{max-width:none;width:100%;max-height:94vh;border-radius:18px 18px 0 0;border-bottom:none}
@@ -524,7 +526,7 @@ html[data-pal="vinho"][data-theme="light"]{
           <option value="aprovado">Aprovadas</option>
           <option value="recusado">Recusadas</option>
           <option value="cancelado">Canceladas</option>
-          <option value="devolvido">Devolvidas ao financeiro</option>
+          <option value="devolvido">Devolvidas</option>
         </select>
       </div>
       <div id="s-meus"></div>
@@ -541,7 +543,7 @@ html[data-pal="vinho"][data-theme="light"]{
           <option value="aprovado">Aprovadas</option>
           <option value="recusado">Recusadas</option>
           <option value="cancelado">Canceladas</option>
-          <option value="devolvido">Devolvidas ao financeiro</option>
+          <option value="devolvido">Devolvidas</option>
         </select>
         <select id="f-setor" onchange="render()"><option value="">Todos os setores</option></select>
         <select id="f-tipo" onchange="render()"><option value="">Todos os tipos</option></select>
@@ -1178,8 +1180,11 @@ window.removerAnexo=function(id, i){
     .catch(function(e){ console.error('remover anexo:',e); alert('Não foi possível remover: '+(e.code||e.message)); });
 };
 
-window.abrirNovo=function(){
+window.abrirNovo=function(base){
   novosAnexos=[];
+  if(base && !base.firestoreId) base=null;       /* chamado pelo botão: vem o evento, não um documento */
+  /* anexos da devolvida que ainda valem vão junto (o arquivo continua onde está) */
+  var anexosBase=base ? (base.anexos||[]).filter(function(a){ return !anexoExpirou(a); }) : [];
   if(!tipos.length){
     alert('Nenhum tipo de documento cadastrado ainda. Peça à diretoria para criar em Tipos.');
     return;
@@ -1192,9 +1197,16 @@ window.abrirNovo=function(){
     return '<option value="'+esc(r)+'">'; }).join('');
 
   modal({
-    titulo:'Nova solicitação', wide:true,
-    sub:'Vai para a diretoria assinar',
-    body:'<div class="grid2">'
+    titulo:base?'Corrigir e reenviar':'Nova solicitação', wide:true,
+    sub:base?esc(base.titulo||''):'Vai para a diretoria assinar',
+    body:(base?'<div class="alert a-info" style="margin-bottom:12px"><div>↩ Devolvida'
+             +(base.devolvidoNome?' por '+esc(base.devolvidoNome):'')
+             +(base.devolvidoEm?' em '+esc(dataBR(base.devolvidoEm)):'')
+             +': <b>'+esc(base.motivoDevolucao||'')+'</b><br>Ajuste o que for preciso e envie — '
+             +'vai como solicitação nova; a devolvida fica no histórico.'
+             +(anexosBase.length?'<br>📎 '+anexosBase.length+(anexosBase.length===1?' anexo dela vai':' anexos dela vão')+' junto.':'')
+             +'</div></div>':'')
+       + '<div class="grid2">'
        +   '<div class="fld"><label>Tipo de documento</label><select id="n-tipo" onchange="trocarModelo()">'+opt+'</select></div>'
        +   '<div class="fld"><label>Setor</label><input type="text" id="n-setor" value="'+esc(meuSetor)+'" placeholder="RH, Comercial, Produção…"></div>'
        + '</div>'
@@ -1258,6 +1270,7 @@ window.abrirNovo=function(){
         pixChave:(document.getElementById('n-pix')||{}).checked
                  ? String((document.getElementById('n-chave')||{}).value||'').trim() : '',
         status:'pendente', criadoPor:sessaoEmail, criadoNome:sessaoNome, criadoEm:agora() };
+      if(base){ dados.reenvioDe=base.firestoreId; if(anexosBase.length) dados.anexos=anexosBase; }
 
       if(modelo==='compra'){
         var lista=lerItens();
@@ -1290,9 +1303,35 @@ window.abrirNovo=function(){
         .catch(function(e){ console.error('novo:',e); alert('Não foi possível enviar: '+(e.code||e.message)); });
     }
   });
-  setTimeout(trocarModelo,30);
+  setTimeout(function(){ trocarModelo(); if(base) preencherNovo(base); },30);
   carregaCadastroForn().then(pintaListaForn);
 };
+
+/* preenche o formulário com a solicitação devolvida */
+function preencherNovo(b){
+  var put=function(id,v){ var e=document.getElementById(id); if(e && v!=null) e.value=v; };
+  var sel=document.getElementById('n-tipo');
+  if(sel && b.tipoId && tipos.some(function(t){ return t.firestoreId===b.tipoId; })){ sel.value=b.tipoId; trocarModelo(); }
+  put('n-setor', b.setor); put('n-tit', b.titulo); put('n-desc', b.descricao);
+  var _h=new Date(), hj=_h.getFullYear()+'-'+String(_h.getMonth()+1).padStart(2,'0')+'-'+String(_h.getDate()).padStart(2,'0');
+  put('n-prazo', (b.prazo && b.prazo>=hj) ? b.prazo : '');   /* prazo vencido volta vazio */
+  if(num(b.valor)>0) put('n-val', b.valor);
+  var f=b.fornecedor||{};
+  put('f-razao', f.razao); put('f-cnpj', f.cnpj); put('f-end', f.endereco);
+  put('f-mun', f.municipio); put('f-pag', f.pagamento); put('f-ent', f.entrega);
+  var px=document.getElementById('n-pix');
+  if(px && b.pix){ px.checked=true; if(window.mostraChave) mostraChave(); put('n-chave', b.pixChave); }
+  var it=b.itens||[], tb=document.getElementById('it-body');
+  if(tb && it.length){
+    while(tb.rows.length<Math.min(it.length,14)) tb.insertAdjacentHTML('beforeend', linhaItem());
+    it.slice(0,14).forEach(function(x,i){
+      var tr=tb.rows[i];
+      tr.querySelector('.it-nome').value=x.nome||''; tr.querySelector('.it-cod').value=x.codigo||'';
+      tr.querySelector('.it-qtd').value=(x.qtd!=null?x.qtd:''); tr.querySelector('.it-un').value=(x.precoUn!=null?x.precoUn:'');
+    });
+    if(window.somaItens) somaItens();
+  }
+}
 
 window.trocarModelo=function(){
   var sel=document.getElementById('n-tipo'); if(!sel) return;
@@ -1529,11 +1568,14 @@ window.detalhes=function(id){
   }
   if(st==='pendente' && podeAprovar){
     extra+='<button class="btn btn-sm" onclick="assinar(\''+esc(id)+'\')">Assinar'+(num(d.valor)>0?' · '+fmtR$(d.valor):'')+'</button>'
-        + (deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\''+esc(id)+'\')">↩ Devolver ao financeiro</button>':'')
+        + (deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\''+esc(id)+'\')">↩ Devolver ao financeiro</button>'
+                           :'<button class="btn btn-sm btn-ghost" onclick="devolverSolicitante(\''+esc(id)+'\')">↩ Devolver para ajuste</button>')
         + '<button class="btn btn-sm btn-ghost" onclick="recusar(\''+esc(id)+'\')">Recusar</button>';
   }else if(st==='aprovado'){
     extra+='<button class="btn btn-sm btn-ghost" onclick="imprimir(\''+esc(id)+'\')">⎙ Imprimir / PDF</button>';
   }
+  if(podeReenviar(d))
+    extra+='<button class="btn btn-sm" onclick="reenviarDevolvida(\''+esc(id)+'\')">✎ Corrigir e reenviar</button>';
 
   modal({ titulo:esc(d.titulo||'—'), wide:true,
           sub:esc(d.tipo||'')+' · '+esc(d.setor||''),
@@ -1581,8 +1623,8 @@ window.devolverFin=function(id){
   if((d.status||'pendente')!=='pendente'){ alert('Só dá para devolver o que ainda espera assinatura.'); return; }
   modal({
     titulo:'Devolver ao financeiro', sub:esc(d.titulo||''),
-    body:'<div class="alert a-info">O pedido volta para o financeiro corrigir e reenviar. '
-       + 'Esta autorização sai da sua fila e fica no histórico como <b>devolvida</b>.</div>'
+    body:'<div class="alert a-info"><div>O pedido volta para o financeiro corrigir e reenviar. '
+       + 'Esta autorização sai da sua fila e fica no histórico como <b>devolvida</b>.</div></div>'
        + '<div class="fld"><label>O que precisa ser revisto</label>'
        + '<input type="text" id="dv-mot" maxlength="180" placeholder="falta cotação, frete fora do campo, preço acima do combinado…"></div>',
     ok:'Devolver',
@@ -1594,6 +1636,50 @@ window.devolverFin=function(id){
                             Object.assign({status:'aguardando_fin'}, r), 'devolver');
     }
   });
+};
+
+/* ---- devolver a quem pediu ----
+   Para as solicitações que NÃO vêm do Peças (essas voltam ao financeiro).
+   Não é recusa: volta para quem pediu corrigir. Esta fica no histórico como
+   "devolvida", com o motivo; o reenvio nasce como autorização nova, que
+   aponta para esta em reenvioDe. Quem assina já pode alterar a autorização
+   (assinaDoc nas regras), então não há regra nova. */
+window.devolverSolicitante=function(id){
+  if(!podeAprovar) return;
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d || deOrigemPecas(d)) return;
+  if((d.status||'pendente')!=='pendente'){ alert('Só dá para devolver o que ainda espera assinatura.'); return; }
+  var quem=d.criadoNome||d.criadoPor||'quem pediu';
+  modal({
+    titulo:'Devolver para ajuste', sub:esc(d.titulo||''),
+    body:'<div class="alert a-info"><div>Volta para <b>'+esc(quem)+'</b> corrigir e reenviar. '
+       + 'Esta solicitação sai da sua fila e fica no histórico como <b>devolvida</b>, com o motivo.</div></div>'
+       + '<div class="fld"><label>O que precisa ser ajustado</label>'
+       + '<textarea id="dv-mot" maxlength="300" placeholder="falta orçamento, valor acima do combinado, trocar fornecedor…"></textarea></div>',
+    ok:'Devolver',
+    onOk:function(){
+      var m=String((document.getElementById('dv-mot')||{}).value||'').trim();
+      if(!m){ alert('Diga o que precisa ser ajustado — é o que a pessoa vai ler.'); return false; }
+      updateDoc(doc(dbC,'assinaturas',id), { status:'devolvido', motivoDevolucao:m,
+          devolvidoPor:sessaoEmail, devolvidoNome:sessaoNome, devolvidoEm:agora() })
+        .catch(function(e){ console.error('devolver:',e); alert('Não foi possível devolver: '+(e.code||e.message)); });
+    }
+  });
+};
+/* a autorização nova que corrigiu esta, se já existir */
+function reenvioDe(id){
+  for(var i=0;i<docs.length;i++) if(docs[i].reenvioDe===id) return docs[i];
+  return null;
+}
+/* só quem pediu, só devolvida para ajuste (não a do Peças) e só uma vez */
+function podeReenviar(d){
+  return !!d && d.status==='devolvido' && !deOrigemPecas(d)
+      && d.criadoPor===sessaoEmail && !reenvioDe(d.firestoreId);
+}
+window.reenviarDevolvida=function(id){
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!podeReenviar(d)) return;
+  abrirNovo(d);
 };
 
 /* ---- assinar ---- */
@@ -1913,20 +1999,29 @@ function cartao(d, comAcoes){
     if(d.obsAprovacao) h+='<div class="doc-desc" style="font-style:italic">'+esc(d.obsAprovacao)+'</div>';
   }
   if(st==='recusado') h+='<div class="doc-rec">Recusado: '+esc(d.motivoRecusa||'')+'</div>';
-  if(st==='devolvido') h+='<div class="doc-rec" style="color:var(--blue);background:var(--card-2)">↩ Devolvido ao financeiro'
+  if(st==='devolvido'){
+    var novaDe=reenvioDe(d.firestoreId);
+    h+='<div class="doc-rec" style="color:var(--blue);background:var(--card-2)">↩ '
+     +(deOrigemPecas(d)?'Devolvido ao financeiro':'Devolvido para ajuste')
      +(d.devolvidoNome?' por '+esc(d.devolvidoNome):'')
      +(d.devolvidoEm?' em '+esc(dataBR(d.devolvidoEm)):'')
-     +(d.motivoDevolucao?': '+esc(d.motivoDevolucao):'')+'</div>';
+     +(d.motivoDevolucao?': '+esc(d.motivoDevolucao):'')
+     +(novaDe?'<br>↻ Corrigido e reenviado em '+esc(dataBR(novaDe.criadoEm)):'')
+     +(podeReenviar(d)?'<span class="so-cel"><br><b>Toque para corrigir e reenviar ›</b></span>':'')+'</div>';
+  }
   if(st==='cancelado') h+='<div class="doc-rec" style="color:var(--muted);background:var(--card-2)">Cancelado'
      +(d.motivoCancelamento?': '+esc(d.motivoCancelamento):'')+'</div>';
   h+='<div class="doc-btns">';
   if(comAcoes && st==='pendente' && podeAprovar){
     h+='<button class="btn btn-sm" onclick="assinar(\'' + esc(d.firestoreId) + '\')">Assinar</button>'
-     + (deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\'' + esc(d.firestoreId) + '\')">↩ Devolver ao financeiro</button>':'')
+     + (deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\'' + esc(d.firestoreId) + '\')">↩ Devolver ao financeiro</button>'
+                        :'<button class="btn btn-sm btn-ghost" onclick="devolverSolicitante(\'' + esc(d.firestoreId) + '\')">↩ Devolver</button>')
      + '<button class="btn btn-sm btn-ghost" onclick="recusar(\'' + esc(d.firestoreId) + '\')">Recusar</button>';
   }
   if(st==='aprovado')
     h+='<button class="btn btn-sm btn-ghost" onclick="imprimir(\'' + esc(d.firestoreId) + '\')">⎙ Imprimir / PDF</button>';
+  if(podeReenviar(d))
+    h+='<button class="btn btn-sm" onclick="reenviarDevolvida(\'' + esc(d.firestoreId) + '\')">✎ Corrigir e reenviar</button>';
   h+='<button class="btn btn-sm btn-ghost b-det" onclick="detalhes(\''+esc(d.firestoreId)+'\')">Ver detalhes</button>';
   h+='</div></div>';
   return h;
