@@ -4,14 +4,11 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Autorizações · Monte Castelo</title>
-<script>try{var _t=localStorage.getItem('mc_gestao_theme');if(_t==='dark'||_t==='light')document.documentElement.setAttribute('data-theme',_t);}catch(e){}
-/* Paleta padrão da Monte Castelo: preto industrial e laranja da marca.
-   Quem nunca escolheu cai no 'mc'; quem escolheu manda. Roda no <head>,
-   antes do CSS, senão a tela pisca verde e troca. */
-var PAL_PADRAO='mc';
-try{var _p=localStorage.getItem('mc_aut_pal');if(_p===null)_p=PAL_PADRAO;
-if(_p)document.documentElement.setAttribute('data-pal',_p);}catch(e){
-document.documentElement.setAttribute('data-pal',PAL_PADRAO);}</script>
+<script>/* aparência compartilhada (mc-ui.js): como é o menu deste app */
+window.MC_UI={ lateral:'#app > nav', botoes:'.navbtn[data-p]', rotulo:'.lab-d', funcsTema:['tema'],
+  nome:'#unome', papel:'#upapel', avatar:'#uav', sair:'sair' };
+var PAL_PADRAO='';</script>
+<script src="https://monte-castelo-ind.github.io/mc-ui.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
