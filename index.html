@@ -1605,6 +1605,38 @@ function dadosSolComodato(dadosAut){
       txt: aprov?(dadosAut.obsAprovacao||''):(dadosAut.motivoRecusa||'') }) };
 }
 
+/* Conserto automático: autorização do Comodato já assinada (ou recusada) cujo
+   pedido ficou parado em "autorizacao" — por exemplo, assinada numa versão
+   antiga deste app, aberta no navegador antes da atualização. Quem assina, ao
+   abrir o app, leva a decisão até o pedido. Uma tentativa por documento. */
+var _syncComodato={};
+function sincronizarComodato(){
+  if(!podeAprovar) return;
+  docs.forEach(function(d){
+    if(!deOrigemComodato(d) || (d.status!=='aprovado' && d.status!=='recusado')) return;
+    if(_syncComodato[d.firestoreId]) return; _syncComodato[d.firestoreId]=1;
+    var ref=doc(dbC,'comodatoSolicitacoes',d.origem.solicitacaoId);
+    getDoc(ref).then(function(snap){
+      if(!snap.exists() || (snap.data()||{}).status!=='autorizacao') return;
+      var aprov=d.status==='aprovado', em=Date.parse(aprov?d.aprovadoEm:d.recusadoEm)||Date.now();
+      var a=aprov ? { status:'aprovado', por:d.aprovadoPor||'', nome:d.aprovadoNome||d.aprovadoPor||'', em:em, codigo:d.codigo||'', obs:d.obsAprovacao||'' }
+                  : { status:'recusado', por:d.recusadoPor||'', nome:d.recusadoNome||d.recusadoPor||'', em:em, motivo:d.motivoRecusa||'' };
+      return updateDoc(ref, { status:aprov?'aberta':'recusada', autorizacao:a, atualizadoEm:Date.now(),
+        atualizadoPor:sessaoEmail, atualizadoNome:sessaoNome,
+        historico:arrayUnion({ em:em, por:a.por, nome:a.nome,
+          acao: aprov?'autorizou (diretoria) — liberado para a manutenção':'recusou (diretoria)',
+          txt: aprov?(a.obs||''):(a.motivo||'') }) });
+    }).catch(function(e){
+      console.warn('sincronizar pedido do Comodato:', e);
+      if(e && e.code==='permission-denied' && !_syncComodato._avisou){
+        _syncComodato._avisou=1;
+        alert('Uma autorização do Manut. Comodato foi assinada, mas o pedido de lá não pôde ser atualizado: '
+          + 'as regras do Firestore com a parte de "equipamento novo" ainda não estão publicadas no console.');
+      }
+    });
+  });
+}
+
 function gravaComPedido(id, d, dadosAut, dadosPedido, rotulo){
   var pr;
   if(deOrigemComodato(d)){
@@ -2231,6 +2263,7 @@ function ouvir(){
                  .sort(function(a,b){ return String(b.criadoEm||'').localeCompare(String(a.criadoEm||'')); });
       checaMudancas();
       render();
+      sincronizarComodato();
     },
     function(e){
       console.error('assinaturas:',e);
