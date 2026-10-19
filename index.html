@@ -1487,6 +1487,7 @@ window.detalhes=function(id){
     + campo('Status', st)
     + campo('Tipo', d.tipo)
     + (deOrigemPecas(d)?campo('Origem', 'App de Peças · pedido de '+(d.origem.solicitadoPor||'—')):'')
+    + (deOrigemComodato(d)?campo('Origem', 'Manut. Comodato · equipamento novo para '+(d.origem.cliente||'—')):'')
     + campo('Setor', d.setor)
     + campo(compra?'Comprador':'Solicitante', d.criadoNome||d.criadoPor)
     + campo('Criado em', dataBR(d.criadoEm))
@@ -1565,7 +1566,8 @@ window.detalhes=function(id){
   }
   if(st==='pendente' && podeAprovar){
     extra+='<button class="btn btn-sm" onclick="assinar(\''+esc(id)+'\')">Assinar'+(num(d.valor)>0?' · '+fmtR$(d.valor):'')+'</button>'
-        + (deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\''+esc(id)+'\')">↩ Devolver ao financeiro</button>'
+        + (deOrigemComodato(d)?''
+           : deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\''+esc(id)+'\')">↩ Devolver ao financeiro</button>'
                            :'<button class="btn btn-sm btn-ghost" onclick="devolverSolicitante(\''+esc(id)+'\')">↩ Devolver para ajuste</button>')
         + '<button class="btn btn-sm btn-ghost" onclick="recusar(\''+esc(id)+'\')">Recusar</button>';
   }else if(st==='aprovado'){
@@ -1588,10 +1590,29 @@ window.detalhes=function(id){
 /* Frete só existe nas autorizações que vêm do Peças; as comuns não têm o campo. */
 function temFreteDoc(d){ return !!d && d.frete!=null && d.frete!==''; }
 function deOrigemPecas(d){ return !!(d && d.origem && d.origem.app==='pecas' && d.origem.pedidoId); }
+/* Equipamento NOVO pedido no Manut. Comodato (ou pelo Comercial): o pedido
+   espera em comodatoSolicitacoes com status "autorizacao". Assinar libera para
+   a manutenção ("aberta"); recusar marca o pedido como "recusada". Mesma ideia
+   do Peças: os dois lados gravam juntos, num lote só. */
+function deOrigemComodato(d){ return !!(d && d.origem && d.origem.app==='comodato' && d.origem.solicitacaoId); }
+function dadosSolComodato(dadosAut){
+  var em=Date.now(), aprov=dadosAut.status==='aprovado';
+  var a=aprov ? { status:'aprovado', por:sessaoEmail, nome:sessaoNome, em:em, codigo:dadosAut.codigo||'', obs:dadosAut.obsAprovacao||'' }
+              : { status:'recusado', por:sessaoEmail, nome:sessaoNome, em:em, motivo:dadosAut.motivoRecusa||'' };
+  return { status: aprov?'aberta':'recusada', autorizacao:a, atualizadoEm:em, atualizadoPor:sessaoEmail, atualizadoNome:sessaoNome,
+    historico: arrayUnion({ em:em, por:sessaoEmail, nome:sessaoNome,
+      acao: aprov?'autorizou (diretoria) — liberado para a manutenção':'recusou (diretoria)',
+      txt: aprov?(dadosAut.obsAprovacao||''):(dadosAut.motivoRecusa||'') }) };
+}
 
 function gravaComPedido(id, d, dadosAut, dadosPedido, rotulo){
   var pr;
-  if(deOrigemPecas(d)){
+  if(deOrigemComodato(d)){
+    var loteC=writeBatch(dbC);
+    loteC.update(doc(dbC,'assinaturas',id), dadosAut);
+    loteC.update(doc(dbC,'comodatoSolicitacoes',d.origem.solicitacaoId), dadosSolComodato(dadosAut));
+    pr=loteC.commit();
+  }else if(deOrigemPecas(d)){
     var lote=writeBatch(dbC);
     lote.update(doc(dbC,'assinaturas',id), dadosAut);
     lote.update(doc(dbC,'pecasPedidos',d.origem.pedidoId), dadosPedido);
@@ -1604,7 +1625,10 @@ function gravaComPedido(id, d, dadosAut, dadosPedido, rotulo){
     alert('Não foi possível '+rotulo+': '+(e.code||e.message)
       + (deOrigemPecas(d) && e.code==='permission-denied'
           ? '\n\nEsta autorização veio do app de Peças, e sua conta não tem permissão para '
-            + 'atualizar o pedido lá. Nada foi gravado.' : ''));
+            + 'atualizar o pedido lá. Nada foi gravado.' : '')
+      + (deOrigemComodato(d) && e.code==='permission-denied'
+          ? '\n\nEsta autorização veio do Manut. Comodato e não foi possível atualizar o pedido lá '
+            + '(regras do Firestore publicadas?). Nada foi gravado.' : ''));
   });
   return pr;
 }
@@ -1644,7 +1668,7 @@ window.devolverFin=function(id){
 window.devolverSolicitante=function(id){
   if(!podeAprovar) return;
   var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
-  if(!d || deOrigemPecas(d)) return;
+  if(!d || deOrigemPecas(d) || deOrigemComodato(d)) return;
   if((d.status||'pendente')!=='pendente'){ alert('Só dá para devolver o que ainda espera assinatura.'); return; }
   var quem=d.criadoNome||d.criadoPor||'quem pediu';
   modal({
@@ -1977,6 +2001,7 @@ function cartao(d, comAcoes){
    + '<div class="doc-meta">'+esc(dataBR(d.criadoEm))+'</div></div>'
    + '<div class="doc-tags"><span class="tag">'+esc(d.tipo||'—')+'</span>'
    +   (deOrigemPecas(d)?'<span class="tag tag-origem">App de Peças</span>':'')
+   +   (deOrigemComodato(d)?'<span class="tag tag-origem">Manut. Comodato</span>':'')
    +   '<span class="tag">'+esc(d.setor||'—')+'</span>'
    +   '<span class="tag">'+esc(d.criadoNome||d.criadoPor||'')+'</span>'
    +   (d.prazo?'<span class="tag">até '+esc(dataBR(d.prazo))+'</span>':'')
@@ -2011,7 +2036,8 @@ function cartao(d, comAcoes){
   h+='<div class="doc-btns">';
   if(comAcoes && st==='pendente' && podeAprovar){
     h+='<button class="btn btn-sm" onclick="assinar(\'' + esc(d.firestoreId) + '\')">Assinar</button>'
-     + (deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\'' + esc(d.firestoreId) + '\')">↩ Devolver ao financeiro</button>'
+     + (deOrigemComodato(d)?''
+        : deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\'' + esc(d.firestoreId) + '\')">↩ Devolver ao financeiro</button>'
                         :'<button class="btn btn-sm btn-ghost" onclick="devolverSolicitante(\'' + esc(d.firestoreId) + '\')">↩ Devolver</button>')
      + '<button class="btn btn-sm btn-ghost" onclick="recusar(\'' + esc(d.firestoreId) + '\')">Recusar</button>';
   }
