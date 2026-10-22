@@ -1518,10 +1518,11 @@ window.detalhes=function(id){
       + '<div class="tw" style="border-radius:10px"><table style="font-size:13px"><thead><tr>'
       +   '<th></th><th>Descrição</th><th class="r">Qtde</th><th class="r">Unit.</th><th class="r">Total</th>'
       + '</tr></thead><tbody>'+(linhas||'<tr><td colspan="5" class="empty">Sem itens</td></tr>')+'</tbody></table></div>'
-      + (temFreteDoc(d)
+      + ((temFreteDoc(d) || ipiDoc(d))
           ? '<div class="it-soma" style="margin:10px 0 2px;color:var(--muted)">Subtotal dos itens: '+fmtR$(total)
-            + ' · Frete: '+(num(d.frete)>0?fmtR$(num(d.frete)):'sem frete')+'</div>' : '')
-      + '<div class="it-soma" style="margin:'+(temFreteDoc(d)?'4px':'10px')+' 0 13px">Valor total: <b>'+fmtR$(total+(temFreteDoc(d)?num(d.frete):0))+'</b></div>';
+            + (temFreteDoc(d)?' · Frete: '+(num(d.frete)>0?fmtR$(num(d.frete)):'sem frete'):'')
+            + (ipiDoc(d)?' · IPI: '+fmtR$(ipiDoc(d)):'')+'</div>' : '')
+      + '<div class="it-soma" style="margin:'+((temFreteDoc(d)||ipiDoc(d))?'4px':'10px')+' 0 13px">Valor total: <b>'+fmtR$(total+(temFreteDoc(d)?num(d.frete):0)+ipiDoc(d))+'</b></div>';
   }else if(num(d.valor)>0){
     b+='<div class="it-soma" style="margin:0 0 13px">Valor: <b>'+fmtR$(d.valor)+'</b></div>';
   }
@@ -1589,6 +1590,8 @@ window.detalhes=function(id){
    autorização aprovada com o pedido ainda parado do outro lado. */
 /* Frete só existe nas autorizações que vêm do Peças; as comuns não têm o campo. */
 function temFreteDoc(d){ return !!d && d.frete!=null && d.frete!==''; }
+/* IPI (opcional) — vem do Peças quando o financeiro informa; entra no total */
+function ipiDoc(d){ return d && num(d.ipi)>0 ? num(d.ipi) : 0; }
 function deOrigemPecas(d){ return !!(d && d.origem && d.origem.app==='pecas' && d.origem.pedidoId); }
 /* Equipamento NOVO pedido no Manut. Comodato (ou pelo Comercial): o pedido
    espera em comodatoSolicitacoes com status "autorizacao". Assinar libera para
@@ -1875,7 +1878,8 @@ function folhaCompra(d){
     var txt=String(it.nome||'')+(it.codigo?' (cód '+it.codigo+')':'');
     return t+(txt.length>58?2:1);
   },0);
-  for(var k=unidades;k<10;k++) vazias+='<tr><td class="c">&nbsp;</td><td></td><td></td><td></td><td></td></tr>';
+  /* a linha do IPI no rodapé ocupa o lugar de uma linha em branco */
+  for(var k=unidades+(ipiDoc(d)?1:0);k<10;k++) vazias+='<tr><td class="c">&nbsp;</td><td></td><td></td><td></td><td></td></tr>';
 
   return '<div class="au-cab">'
     +   '<img class="au-logo" src="'+LOGO_MC+'" alt="Monte Castelo">'
@@ -1901,8 +1905,9 @@ function folhaCompra(d){
     + '<tfoot>'
     +   (temFreteDoc(d)?'<tr><td colspan="4" class="r"><b>FRETE:</b></td>'
     +     '<td class="r">'+(num(d.frete)>0?'R$&nbsp;'+fmtN(num(d.frete),2):'—')+'</td></tr>':'')
+    +   (ipiDoc(d)?'<tr><td colspan="4" class="r"><b>IPI:</b></td><td class="r">R$&nbsp;'+fmtN(ipiDoc(d),2)+'</td></tr>':'')
     +   '<tr><td colspan="4" class="r"><b>VALOR TOTAL:</b></td>'
-    +   '<td class="r"><b>'+((total+(temFreteDoc(d)?num(d.frete):0))>0?'R$&nbsp;'+fmtN(total+(temFreteDoc(d)?num(d.frete):0),2):'—')+'</b></td></tr></tfoot></table>'
+    +   '<td class="r"><b>'+((total+(temFreteDoc(d)?num(d.frete):0)+ipiDoc(d))>0?'R$&nbsp;'+fmtN(total+(temFreteDoc(d)?num(d.frete):0)+ipiDoc(d),2):'—')+'</b></td></tr></tfoot></table>'
     + '<div class="au-obs"><b>OBSERVAÇÃO:</b><br>'+esc(d.descricao||'')
     +   pixNaFolha(d, !!d.descricao)
     +   (d.obsAprovacao?'\n\nDiretoria: '+esc(d.obsAprovacao):'')+'</div>'
