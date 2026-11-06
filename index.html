@@ -144,6 +144,11 @@ td{padding:9px;border-bottom:1px solid var(--border)}
          border:1px solid rgba(139,127,232,.32);border-radius:9px;padding:9px 12px;margin-bottom:13px}
 .pix-fld input{width:auto;flex:0 0 auto}
 .pix-fld label{margin:0;font-size:13px;font-weight:600;color:var(--purple);text-transform:none;letter-spacing:0}
+.bol-fld{display:flex;align-items:center;gap:8px;background:rgba(75,123,236,.09);
+         border:1px solid rgba(75,123,236,.32);border-radius:9px;padding:9px 12px;margin-bottom:13px;cursor:help}
+.bol-fld input{width:auto;flex:0 0 auto}
+.bol-fld label{margin:0;font-size:13px;font-weight:600;color:var(--blue);text-transform:none;letter-spacing:0;cursor:pointer}
+.st-boleto{color:var(--blue);background:rgba(75,123,236,.13);border:1px solid rgba(75,123,236,.45)}
 .doc-meta{font-size:11.5px;color:var(--muted)}
 .doc-desc{font-size:13px;color:var(--muted);margin:8px 0;line-height:1.55;white-space:pre-wrap}
 .doc-val{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:var(--primary)}
@@ -1228,6 +1233,9 @@ window.abrirNovo=function(base){
        +   '<div id="box-chave" class="fld"><label>Chave Pix <span style="color:var(--red)">*</span></label>'
        +     '<input type="text" id="n-chave" maxlength="140" autocomplete="off" '
        +       'placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"></div>'
+       +   '<div class="bol-fld" title="Marque essa opção para boletos com vencimento no dia da solicitação">'
+       +     '<input type="checkbox" id="n-boleto" onchange="marcaBoleto()">'
+       +     '<label for="n-boleto" title="Marque essa opção para boletos com vencimento no dia da solicitação">Boleto à vista</label></div>'
        +   '<label>Itens</label>'
        +   '<div class="tw" style="border-radius:10px"><table class="itens"><thead><tr>'
        +     '<th>Descrição do produto</th><th>Cód.</th><th>Qtde</th><th>Unit. (R$)</th><th class="r">Total</th>'
@@ -1266,6 +1274,7 @@ window.abrirNovo=function(base){
         pix:!!(document.getElementById('n-pix')||{}).checked,
         pixChave:(document.getElementById('n-pix')||{}).checked
                  ? String((document.getElementById('n-chave')||{}).value||'').trim() : '',
+        boletoVista:!!(document.getElementById('n-boleto')||{}).checked,
         status:'pendente', criadoPor:sessaoEmail, criadoNome:sessaoNome, criadoEm:agora() };
       if(base){ dados.reenvioDe=base.firestoreId; if(anexosBase.length) dados.anexos=anexosBase; }
 
@@ -1318,6 +1327,7 @@ function preencherNovo(b){
   put('f-mun', f.municipio); put('f-pag', f.pagamento); put('f-ent', f.entrega);
   var px=document.getElementById('n-pix');
   if(px && b.pix){ px.checked=true; if(window.mostraChave) mostraChave(); put('n-chave', b.pixChave); }
+  var bo=document.getElementById('n-boleto'); if(bo && b.boletoVista && !b.pix) bo.checked=true;
   var it=b.itens||[], tb=document.getElementById('it-body');
   if(tb && it.length){
     while(tb.rows.length<Math.min(it.length,14)) tb.insertAdjacentHTML('beforeend', linhaItem());
@@ -1343,8 +1353,13 @@ window.trocarModelo=function(){
 };
 window.mostrarValor=window.trocarModelo;   /* nome antigo, mantido */
 
+window.marcaBoleto=function(){
+  var bo=document.getElementById('n-boleto'), px=document.getElementById('n-pix');
+  if(bo && bo.checked && px && px.checked){ px.checked=false; mostraChave(); }
+};
 window.mostraChave=function(){
   var on=!!(document.getElementById('n-pix')||{}).checked;
+  if(on){ var _bo=document.getElementById('n-boleto'); if(_bo) _bo.checked=false; }
   var b=document.getElementById('box-chave');
   if(b) b.classList.toggle('on', on);
   if(on){ var c=document.getElementById('n-chave'); if(c) c.focus(); }
@@ -1474,7 +1489,10 @@ window.detalhes=function(id){
   var f=d.fornecedor||{}, itens=d.itens||[];
   var compra=(d.modelo==='compra');
 
-  var b=(d.pix?'<div class="alert" style="color:var(--purple);'
+  var b=(d.boletoVista?'<div class="alert" style="color:var(--blue);'
+    + 'background:rgba(75,123,236,.11);border:1px solid rgba(75,123,236,.4)">'
+    + 'Boleto à vista — vence no dia da solicitação ('+esc(dataBR(d.criadoEm))+')</div>':'')
+    + (d.pix?'<div class="alert" style="color:var(--purple);'
     + 'background:rgba(139,127,232,.11);border:1px solid rgba(139,127,232,.4)">'
     + 'Pix Comprovante — marcado para o financeiro</div>':'')
     + (d.pix && d.pixPago
@@ -2034,7 +2052,8 @@ function cartao(d, comAcoes){
             : (pixAPagar(d)
                 ? '<span class="doc-st st-pixapagar" title="Assinada — o financeiro ainda não confirmou o pagamento">Pix a pagar</span>'
                 : '<span class="doc-st st-pix">Pix Comprovante</span>'))
-        : '')+'</div>'
+        : '')
+   + (d.boletoVista?'<span class="doc-st st-boleto" title="Boleto com vencimento no dia da solicitação">Boleto à vista</span>':'')+'</div>'
    + '<div class="doc-meta">'+esc(dataBR(d.criadoEm))+'</div></div>'
    + '<div class="doc-tags"><span class="tag">'+esc(d.tipo||'—')+'</span>'
    +   (deOrigemPecas(d)?'<span class="tag tag-origem">App de Peças</span>':'')
