@@ -131,6 +131,9 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .st-pix{color:var(--purple);background:rgba(139,127,232,.15);border:1px solid rgba(139,127,232,.45)}
 /* pago = mesmo roxo, preenchido. Não usa verde: verde já é "aprovado". */
 .st-pixpago{color:#fff;background:var(--purple);border:1px solid var(--purple)}
+.st-pago{color:#fff;background:var(--blue);border:1px solid var(--blue)}
+.baixa-ok{display:flex;gap:10px;align-items:flex-start;border-radius:10px;padding:10px 13px;margin-bottom:13px;
+          font-size:13px;line-height:1.5;color:var(--blue);background:rgba(75,123,236,.11);border:1px solid rgba(75,123,236,.4)}
 .st-pixapagar{color:var(--purple);background:transparent;border:1px dashed var(--purple)}
 .st-pixapagar::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;
                       background:var(--purple);margin-right:6px;vertical-align:1px}
@@ -554,6 +557,8 @@ html[data-pal="vinho"][data-theme="light"]{
           <option value="pix">Pix Comprovante</option>
           <option value="apagar">Pix a pagar</option>
           <option value="pago">Pix pago</option>
+          <option value="bapagar">Boleto/faturado a pagar</option>
+          <option value="bpago">Boleto/faturado pago</option>
         </select>
         <button class="btn btn-sm btn-ghost" onclick="exportarCSV()" style="margin-left:auto">⤓ CSV</button>
       </div>
@@ -1458,6 +1463,49 @@ window.desfazerPix=function(id){
       alert('Não foi possível desfazer: '+(e.code||e.message)); });
 };
 
+/* ---- Baixa de pagamento (boleto, faturado, à vista…) ----
+   Para autorização assinada que NÃO é Pix (o Pix tem a confirmação própria).
+   Quem dá baixa: financeiro (assFinanceiro) ou diretoria. Desfazer: diretoria. */
+window.darBaixa=function(id){
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d || d.pix) return;
+  if(!podeConfirmarPix()){ alert('Só o financeiro dá baixa no pagamento.'); return; }
+  if(d.status!=='aprovado'){ alert('Só dá para dar baixa em autorização já assinada.'); return; }
+  var f=d.fornecedor||{};
+  modal({
+    titulo:'Dar baixa — pago', sub:esc(d.titulo||''),
+    body:'<div class="det">'
+       +   campo('Valor', fmtR$(d.valor))
+       +   campo('Fornecedor', f.razao||'—')
+       +   campo('Forma de pagamento', f.pagamento||(d.boletoVista?'Boleto à vista':'—'))
+       + '</div>'
+       + '<div class="fld"><label>Observação</label>'
+       + '<input type="text" id="c-baixa" maxlength="160" autocomplete="off" '
+       + 'placeholder="opcional — nº do boleto, da nota ou do comprovante"></div>',
+    ok:'Confirmar pagamento',
+    onOk:function(){
+      var dados={ pago:true, pagoEm:agora(), pagoPor:sessaoEmail, pagoNome:sessaoNome,
+                  pagoObs:String((document.getElementById('c-baixa')||{}).value||'').trim() };
+      updateDoc(doc(dbC,'assinaturas',id), dados)
+        .then(function(){ Object.assign(d,dados); render(); detalhes(id); })
+        .catch(function(e){ console.error('darBaixa:',e);
+          alert('Não foi possível dar baixa: '+(e.code||e.message)); });
+    }
+  });
+};
+
+window.desfazerBaixa=function(id){
+  if(!ehAdmin){ alert('Só a diretoria desfaz a baixa de pagamento.'); return; }
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d) return;
+  if(!confirm('Desfazer a baixa? O registro de quem deu baixa será apagado.')) return;
+  var dados={ pago:false, pagoEm:'', pagoPor:'', pagoNome:'', pagoObs:'' };
+  updateDoc(doc(dbC,'assinaturas',id), dados)
+    .then(function(){ Object.assign(d,dados); render(); detalhes(id); })
+    .catch(function(e){ console.error('desfazerBaixa:',e);
+      alert('Não foi possível desfazer: '+(e.code||e.message)); });
+};
+
 /* Chave Pix mesclada na observação da folha impressa. Não é campo novo na
    folha: entra no mesmo quadro, depois do texto, para não custar espaço. */
 function pixNaFolha(d, temTextoAntes){
@@ -1495,6 +1543,12 @@ window.detalhes=function(id){
     + (d.pix?'<div class="alert" style="color:var(--purple);'
     + 'background:rgba(139,127,232,.11);border:1px solid rgba(139,127,232,.4)">'
     + 'Pix Comprovante — marcado para o financeiro</div>':'')
+    + (!d.pix && d.pago
+        ? '<div class="baixa-ok"><div>✓</div><div><b>Pago</b> — baixa dada por '+esc(d.pagoNome||d.pagoPor||'')
+          + ' em '+esc(dataBR(d.pagoEm))+' às '+esc(horaBR(d.pagoEm))
+          + (d.pagoObs?'<br><span style="color:var(--muted)">'+esc(d.pagoObs)+'</span>':'')
+          + '</div></div>'
+        : '')
     + (d.pix && d.pixPago
         ? '<div class="pix-pago"><div>✓</div><div><b>Pix pago</b> por '+esc(d.pixPagoNome||d.pixPagoPor||'')
           + ' em '+esc(dataBR(d.pixPagoEm))+' às '+esc(horaBR(d.pixPagoEm))
@@ -1573,6 +1627,13 @@ window.detalhes=function(id){
   if(d.pix && st==='aprovado' && !d.pixPago && podeConfirmarPix()){
     extra+='<button class="btn btn-sm" style="background:var(--purple)" '
       + 'onclick="confirmarPix(\''+esc(id)+'\')">Confirmar Pix efetuado</button>';
+  }
+  if(!d.pix && st==='aprovado' && !d.pago && podeConfirmarPix()){
+    extra+='<button class="btn btn-sm" style="background:var(--blue)" '
+      + 'onclick="darBaixa(\''+esc(id)+'\')">✓ Dar baixa — pago</button>';
+  }
+  if(!d.pix && d.pago && ehAdmin){
+    extra+='<button class="btn btn-sm btn-ghost" onclick="desfazerBaixa(\''+esc(id)+'\')">Desfazer baixa</button>';
   }
   if(d.pix && d.pixPago && ehAdmin){
     extra+='<button class="btn btn-sm btn-ghost" onclick="desfazerPix(\''+esc(id)+'\')">Desfazer pagamento</button>';
@@ -2053,6 +2114,7 @@ function cartao(d, comAcoes){
                 ? '<span class="doc-st st-pixapagar" title="Assinada — o financeiro ainda não confirmou o pagamento">Pix a pagar</span>'
                 : '<span class="doc-st st-pix">Pix Comprovante</span>'))
         : '')
+   + (!d.pix && d.pago?'<span class="doc-st st-pago" title="Baixa dada por '+esc(d.pagoNome||d.pagoPor||'')+' em '+esc(dataBR(d.pagoEm))+'">Pago</span>':'')
    + (d.boletoVista?'<span class="doc-st st-boleto" title="Boleto com vencimento no dia da solicitação">Boleto à vista</span>':'')+'</div>'
    + '<div class="doc-meta">'+esc(dataBR(d.criadoEm))+'</div></div>'
    + '<div class="doc-tags"><span class="tag">'+esc(d.tipo||'—')+'</span>'
@@ -2187,6 +2249,8 @@ function render(){
       if(fp==='pix'    && !d.pix) return false;
       if(fp==='apagar' && !pixAPagar(d)) return false;
       if(fp==='pago'   && !(d.pix && d.pixPago)) return false;
+      if(fp==='bapagar' && !(!d.pix && (d.status||'pendente')==='aprovado' && !d.pago)) return false;
+      if(fp==='bpago'   && !(!d.pix && d.pago)) return false;
       if(st && (d.status||'pendente')!==st) return false;
       if(se && d.setor!==se) return false;
       if(ti && d.tipo!==ti) return false;
@@ -2237,10 +2301,11 @@ function encher(id, vazio, itens){
 }
 
 window.exportarCSV=function(){
-  var l=['Codigo;Status;Pix;Chave Pix;Pix pago em;Pix pago por;Tipo;Setor;Titulo;Valor;Solicitante;Criado;Assinado por;Assinado em'];
+  var l=['Codigo;Status;Pix;Chave Pix;Pix pago em;Pix pago por;Baixa (pago) em;Baixa por;Tipo;Setor;Titulo;Valor;Solicitante;Criado;Assinado por;Assinado em'];
   docs.forEach(function(d){
     l.push([d.codigo||'', d.status||'', (d.pix?'SIM':''), (d.pixChave||'').replace(/;/g,','),
-      (d.pixPago?dataBR(d.pixPagoEm):''), (d.pixPago?(d.pixPagoPor||''):''), d.tipo||'', d.setor||'', (d.titulo||'').replace(/;/g,','),
+      (d.pixPago?dataBR(d.pixPagoEm):''), (d.pixPago?(d.pixPagoPor||''):''),
+      (d.pago?dataBR(d.pagoEm):''), (d.pago?(d.pagoPor||''):''), d.tipo||'', d.setor||'', (d.titulo||'').replace(/;/g,','),
       num(d.valor).toFixed(2).replace('.',','), d.criadoNome||d.criadoPor||'',
       dataBR(d.criadoEm), d.aprovadoPor||'', d.aprovadoEm?dataBR(d.aprovadoEm):''].join(';'));
   });
