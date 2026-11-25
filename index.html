@@ -1187,11 +1187,12 @@ window.removerAnexo=function(id, i){
     .catch(function(e){ console.error('remover anexo:',e); alert('Não foi possível remover: '+(e.code||e.message)); });
 };
 
-window.abrirNovo=function(base){
+window.abrirNovo=function(base, modo){
   novosAnexos=[];
   if(base && !base.firestoreId) base=null;       /* chamado pelo botão: vem o evento, não um documento */
+  var reabrir=!!(base && modo==='reabrir');
   /* anexos da devolvida que ainda valem vão junto (o arquivo continua onde está) */
-  var anexosBase=base ? (base.anexos||[]).filter(function(a){ return !anexoExpirou(a); }) : [];
+  var anexosBase=(base && !reabrir) ? (base.anexos||[]).filter(function(a){ return !anexoExpirou(a); }) : [];
   if(!tipos.length){
     alert('Nenhum tipo de documento cadastrado ainda. Peça à diretoria para criar em Tipos.');
     return;
@@ -1204,9 +1205,15 @@ window.abrirNovo=function(base){
     return '<option value="'+esc(r)+'">'; }).join('');
 
   modal({
-    titulo:base?'Corrigir e reenviar':'Nova solicitação', wide:true,
+    titulo:reabrir?'Reabrir e editar':(base?'Corrigir e reenviar':'Nova solicitação'), wide:true,
     sub:base?esc(base.titulo||''):'Vai para a diretoria assinar',
-    body:(base?'<div class="alert a-info" style="margin-bottom:12px"><div>↩ Devolvida'
+    body:(reabrir?'<div class="alert a-warn" style="margin-bottom:12px"><div>↺ Assinada por '+esc(base.aprovadoNome||base.aprovadoPor||'')
+             +' em '+esc(dataBR(base.aprovadoEm))+' · código <b>'+esc(base.codigo||'')+'</b> · '+fmtR$(base.valor)
+             +'<br>Ao salvar, ela volta para <b>pendente</b> com os dados novos e precisa ser <b>assinada de novo</b> '
+             +'(sai código novo; o antigo deixa de valer). Quem pediu e os anexos continuam os mesmos.</div></div>'
+             +'<div class="fld"><label>Motivo da reabertura <span style="color:var(--red)">*</span></label>'
+             +'<input type="text" id="n-motivo" maxlength="160" placeholder="ex.: valor da nota veio diferente do orçamento"></div>'
+         :base?'<div class="alert a-info" style="margin-bottom:12px"><div>↩ Devolvida'
              +(base.devolvidoNome?' por '+esc(base.devolvidoNome):'')
              +(base.devolvidoEm?' em '+esc(dataBR(base.devolvidoEm)):'')
              +': <b>'+esc(base.motivoDevolucao||'')+'</b><br>Ajuste o que for preciso e envie — '
@@ -1253,12 +1260,12 @@ window.abrirNovo=function(base){
        + '<div class="fld" style="margin-top:13px"><label id="lb-desc">Descrição / justificativa</label>'
        +   '<textarea id="n-desc" placeholder="o que é, por que precisa, para quem…"></textarea></div>'
        + '<div class="fld"><label>Precisa até</label><input type="date" id="n-prazo"></div>'
-       + '<div class="fld"><label>Anexos</label>'
+       + (reabrir?'':'<div class="fld"><label>Anexos</label>'
        +   '<input type="file" id="n-anx" multiple accept="application/pdf,image/*" style="display:none" onchange="escolheAnexosNovos(this)">'
        +   '<div id="n-anx-lista" class="anx-lista" style="display:none"></div>'
        +   '<button type="button" id="n-anx-bt" class="btn btn-sm btn-ghost" onclick="document.getElementById(\'n-anx\').click()">📎 Anexar arquivo</button>'
-       +   '<div class="anx-dica">Opcional. PDF ou foto, até 5 arquivos de 10 MB. Ficam guardados por 90 dias.</div></div>',
-    ok:'Enviar para assinatura',
+       +   '<div class="anx-dica">Opcional. PDF ou foto, até 5 arquivos de 10 MB. Ficam guardados por 90 dias.</div></div>'),
+    ok:reabrir?'Salvar e voltar para assinatura':'Enviar para assinatura',
     onOk:function(){
       var tipoId=document.getElementById('n-tipo').value;
       var t=tipos.filter(function(x){ return x.firestoreId===tipoId; })[0];
@@ -1268,6 +1275,8 @@ window.abrirNovo=function(base){
       var desc=String(document.getElementById('n-desc').value||'').trim();
 
       if(!tit){ alert('Informe o título.'); return false; }
+      var motivoReab=reabrir?String((document.getElementById('n-motivo')||{}).value||'').trim():'';
+      if(reabrir && !motivoReab){ alert('Informe o motivo da reabertura — fica registrado no histórico.'); return false; }
       var marcouPix=!!(document.getElementById('n-pix')||{}).checked;
       var chaveDig=String((document.getElementById('n-chave')||{}).value||'').trim();
       if(marcouPix && !chaveDig){ alert('Informe a chave Pix — o financeiro precisa dela para pagar.'); return false; }
@@ -1281,7 +1290,7 @@ window.abrirNovo=function(base){
                  ? String((document.getElementById('n-chave')||{}).value||'').trim() : '',
         boletoVista:!!(document.getElementById('n-boleto')||{}).checked,
         status:'pendente', criadoPor:sessaoEmail, criadoNome:sessaoNome, criadoEm:agora() };
-      if(base){ dados.reenvioDe=base.firestoreId; if(anexosBase.length) dados.anexos=anexosBase; }
+      if(base && !reabrir){ dados.reenvioDe=base.firestoreId; if(anexosBase.length) dados.anexos=anexosBase; }
 
       if(modelo==='compra'){
         var lista=lerItens();
@@ -1305,6 +1314,20 @@ window.abrirNovo=function(base){
         dados.valor=val;
       }
 
+      if(reabrir){
+        /* mesma autorização: volta a pendente com os dados novos; quem pediu e
+           quando continuam os de origem; a assinatura anterior vai para o histórico */
+        delete dados.criadoPor; delete dados.criadoNome; delete dados.criadoEm;
+        dados.status='pendente';
+        dados.codigo=''; dados.aprovadoPor=''; dados.aprovadoNome=''; dados.aprovadoEm=''; dados.obsAprovacao='';
+        dados.reaberturas=(base.reaberturas||[]).concat([{ em:agora(), por:sessaoEmail, nome:sessaoNome, motivo:motivoReab,
+          codigoAnterior:base.codigo||'', valorAnterior:num(base.valor), assinadoPor:base.aprovadoPor||'', assinadoEm:base.aprovadoEm||'' }]);
+        var idR=base.firestoreId;
+        updateDoc(doc(dbC,'assinaturas',idR), dados)
+          .then(function(){ Object.assign(base, dados); if(dados.fornecedor) guardaFornecedorNovo(dados.fornecedor); render(); detalhes(idR); })
+          .catch(function(e){ console.error('reabrir:',e); alert('Não foi possível reabrir: '+(e.code||e.message)); });
+        return;
+      }
       var anexosDoEnvio=novosAnexos.slice(); novosAnexos=[];
       addDoc(collection(dbC,'assinaturas'), dados)
         .then(function(r){
@@ -1314,18 +1337,18 @@ window.abrirNovo=function(base){
         .catch(function(e){ console.error('novo:',e); alert('Não foi possível enviar: '+(e.code||e.message)); });
     }
   });
-  setTimeout(function(){ trocarModelo(); if(base) preencherNovo(base); },30);
+  setTimeout(function(){ trocarModelo(); if(base) preencherNovo(base, reabrir); },30);
   carregaCadastroForn().then(pintaListaForn);
 };
 
 /* preenche o formulário com a solicitação devolvida */
-function preencherNovo(b){
+function preencherNovo(b, manter){   /* manter = reabrir: nada se perde (prazo, todos os itens) */
   var put=function(id,v){ var e=document.getElementById(id); if(e && v!=null) e.value=v; };
   var sel=document.getElementById('n-tipo');
   if(sel && b.tipoId && tipos.some(function(t){ return t.firestoreId===b.tipoId; })){ sel.value=b.tipoId; trocarModelo(); }
   put('n-setor', b.setor); put('n-tit', b.titulo); put('n-desc', b.descricao);
   var _h=new Date(), hj=_h.getFullYear()+'-'+String(_h.getMonth()+1).padStart(2,'0')+'-'+String(_h.getDate()).padStart(2,'0');
-  put('n-prazo', (b.prazo && b.prazo>=hj) ? b.prazo : '');   /* prazo vencido volta vazio */
+  put('n-prazo', (b.prazo && (manter || b.prazo>=hj)) ? b.prazo : '');   /* prazo vencido volta vazio */
   if(num(b.valor)>0) put('n-val', b.valor);
   var f=b.fornecedor||{};
   put('f-razao', f.razao); put('f-cnpj', f.cnpj); put('f-end', f.endereco);
@@ -1335,8 +1358,9 @@ function preencherNovo(b){
   var bo=document.getElementById('n-boleto'); if(bo && b.boletoVista && !b.pix) bo.checked=true;
   var it=b.itens||[], tb=document.getElementById('it-body');
   if(tb && it.length){
-    while(tb.rows.length<Math.min(it.length,14)) tb.insertAdjacentHTML('beforeend', linhaItem());
-    it.slice(0,14).forEach(function(x,i){
+    var lim=manter?it.length:14;
+    while(tb.rows.length<Math.min(it.length,lim)) tb.insertAdjacentHTML('beforeend', linhaItem());
+    it.slice(0,lim).forEach(function(x,i){
       var tr=tb.rows[i];
       tr.querySelector('.it-nome').value=x.nome||''; tr.querySelector('.it-cod').value=x.codigo||'';
       tr.querySelector('.it-qtd').value=(x.qtd!=null?x.qtd:''); tr.querySelector('.it-un').value=(x.precoUn!=null?x.precoUn:'');
@@ -1622,6 +1646,11 @@ window.detalhes=function(id){
     if(d.obsAprovacao) b+='<div class="det-txt">Diretoria: '+esc(d.obsAprovacao)+'</div>';
   }
   if(st==='recusado') b+='<div class="doc-rec">Recusado: '+esc(d.motivoRecusa||'')+'</div>';
+  (d.reaberturas||[]).forEach(function(r){
+    b+='<div class="alert a-warn"><div>↺ Reaberta por '+esc(r.nome||r.por||'')+' em '+esc(dataBR(r.em))+' às '+esc(horaBR(r.em))
+      +': '+esc(r.motivo||'')+'<br><span style="opacity:.85">Antes: '+fmtR$(r.valorAnterior)
+      +(r.codigoAnterior?' · código '+esc(r.codigoAnterior)+' (não vale mais)':'')+'</span></div></div>';
+  });
 
   var extra='';
   if(d.pix && st==='aprovado' && !d.pixPago && podeConfirmarPix()){
@@ -1651,6 +1680,8 @@ window.detalhes=function(id){
                            :'<button class="btn btn-sm btn-ghost" onclick="devolverSolicitante(\''+esc(id)+'\')">↩ Devolver para ajuste</button>')
         + '<button class="btn btn-sm btn-ghost" onclick="recusar(\''+esc(id)+'\')">Recusar</button>';
   }else if(st==='aprovado'){
+    if(podeAprovar && !deOrigemPecas(d) && !deOrigemComodato(d))
+      extra+='<button class="btn btn-sm btn-ghost" onclick="reabrirAssinada(\''+esc(id)+'\')">↺ Reabrir e editar</button>';
     extra+='<button class="btn btn-sm btn-ghost" onclick="imprimir(\''+esc(id)+'\')">⎙ Imprimir / PDF</button>';
   }
   if(podeReenviar(d))
@@ -1751,6 +1782,20 @@ function gravaComPedido(id, d, dadosAut, dadosPedido, rotulo){
    Só para autorização que veio do Peças e ainda espera assinatura. Não é
    recusa: o pedido volta para o financeiro corrigir e reenviar, e aí nasce
    uma autorização nova. Esta fica no histórico como "devolvida", com o motivo. */
+/* Reabrir uma autorização já assinada para corrigir valor/itens (só quem assina).
+   Pedido do Peças e do Comodato não reabre por aqui: o pedido do outro app já
+   andou junto com a assinatura. Pago (Pix ou baixa) precisa ser desfeito antes. */
+window.reabrirAssinada=function(id){
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d) return;
+  if(!podeAprovar){ alert('Só quem assina pode reabrir.'); return; }
+  if(d.status!=='aprovado'){ alert('Só dá para reabrir autorização já assinada.'); return; }
+  if(deOrigemPecas(d)||deOrigemComodato(d)){ alert('Esta autorização veio de outro app (Peças ou Comodato) e não reabre por aqui.'); return; }
+  if(d.pixPago||d.pago){ alert('Esta autorização já está marcada como paga. Desfaça o pagamento antes de reabrir.'); return; }
+  fecharModal();
+  abrirNovo(d, 'reabrir');
+};
+
 window.devolverFin=function(id){
   if(!podeAprovar) return;
   var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
@@ -2047,6 +2092,12 @@ window.verificar=function(){
   if(!d && !(ehAdmin||ehFinanceiro)){
     r.innerHTML='<div class="alert a-info">A conferência por código é feita pela diretoria '
       + 'ou pelo financeiro — eles leem todos os documentos. Encaminhe o código para eles.</div>';
+    return;
+  }
+  var reab=!d && docs.filter(function(x){ return (x.reaberturas||[]).some(function(q){ return String(q.codigoAnterior||'').toUpperCase()===c; }); })[0];
+  if(reab){
+    r.innerHTML='<div class="alert a-warn">▲ Este código foi <b>substituído</b>: a autorização “'+esc(reab.titulo||'')+'” foi reaberta para correção'
+      +(reab.codigo?' e assinada de novo com o código <b>'+esc(reab.codigo)+'</b>.':' e ainda espera nova assinatura.')+' A folha com o código antigo não vale mais.</div>';
     return;
   }
   if(!d){
