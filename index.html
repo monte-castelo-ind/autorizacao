@@ -503,6 +503,13 @@ td{padding:9px;border-bottom:1px solid var(--border)}
 .auth-lembrar{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer;margin:2px 0 12px;font-weight:400;text-transform:none;letter-spacing:0}
 .auth-lembrar input{accent-color:var(--primary);width:16px;height:16px;margin:0}
 .auth-cx .btn-full{padding:12px;border-radius:11px;box-shadow:0 6px 18px var(--prim-sombra)}
+/* Tipos de documento no celular: cartão no lugar da tabela */
+@media(max-width:600px){
+  #s-tipos table,#s-tipos tbody,#s-tipos tr,#s-tipos td{display:block;width:auto}
+  #s-tipos thead{display:none}
+  #s-tipos tr{border-bottom:1px solid var(--border);padding:10px 4px}
+  #s-tipos td{border:0;padding:2px 10px;text-align:left}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
 /* ---- impressão ---- */
@@ -1005,6 +1012,7 @@ function diagnosticos(){
   var dev=docs.filter(function(d){ return d.criadoPor===sessaoEmail && podeReenviar(d); });
   if(dev.length) L.push({sev:'warn', titulo:dev.length+' devolvida'+(dev.length>1?'s':'')+' para você corrigir', sub:'A diretoria pediu ajuste', ir:function(){ nav('meus'); }});
   if(erroLista) L.unshift({sev:'bad', titulo:'A lista não carregou', sub:erroLista, ir:function(){ nav(paginaInicial()); }});
+  if(erroTipos) L.unshift({sev:'bad', titulo:'Tipos de documento não carregaram', sub:erroTipos+' Sem eles não dá para abrir solicitação nova.', ir:function(){ nav(paginaInicial()); }});
   return L;
 }
 function pintaAviso(suf, lista){
@@ -2722,7 +2730,7 @@ document.getElementById('fLogin').addEventListener('submit', async function(ev){
   }finally{ b.disabled=false; b.textContent='Entrar'; }
 });
 
-var erroLista='';
+var erroLista='', erroTipos='';
 
 /* Quem vê o quê.
    Diretoria e financeiro (Jonathan, Simone) leem a coleção inteira; os demais
@@ -2754,7 +2762,7 @@ function ouvir(){
   onSnapshot(collection(dbC,'assTipos'),
     function(s){ tipos=s.docs.map(function(x){ return Object.assign({firestoreId:x.id}, x.data()); })
       .sort(function(a,b){ return String(a.nome||'').localeCompare(String(b.nome||''),'pt-BR'); }); render(); },
-    function(e){ console.error('assTipos:',e); });
+    function(e){ console.error('assTipos:',e); erroTipos='Os tipos de documento não carregaram ('+(e.code||e.message)+').'; render(); });
 }
 
 onAuthStateChanged(auth, async function(u){
@@ -2765,14 +2773,16 @@ onAuthStateChanged(auth, async function(u){
   }
   sessaoEmail=u.email||'';
   var d={};
+  var erroUsu='';
   try{ var s=await getDoc(doc(dbC,'usuarios',u.uid)); d=s.exists()?s.data():{}; }
-  catch(e){ console.error('usuarios:',e); }
+  catch(e){ console.error('usuarios:',e); erroUsu=(e.code||e.message||'erro'); }
 
   if(d.ativo!==true || (d.role!=='admin' && d.assinaturas!==true)){
     document.getElementById('auth').style.display='flex';
     document.getElementById('app').style.display='none';
     var er=document.getElementById('erro');
-    er.textContent='Sua conta não tem acesso ao app de Autorizações. Fale com a diretoria.';
+    er.textContent=erroUsu ? ('Não foi possível ler suas permissões ('+erroUsu+'). Confira a internet e tente de novo.')
+                           : 'Sua conta não tem acesso ao app de Autorizações. Fale com a diretoria.';
     er.style.display='block';
     await signOut(auth);
     return;
