@@ -1942,7 +1942,13 @@ window.detalhes=function(id){
       + 'onclick="togglePix(\''+esc(id)+'\')">'
       + (d.pix?'Desmarcar Pix Comprovante':'Marcar Pix Comprovante')+'</button>';
   }
-  if(st==='pendente' && podeAprovar){
+  if(st==='pendente' && deOrigemCredito(d)){
+    /* crédito de cliente: quem decide é o financeiro, com limite e prazo */
+    extra+=(decideCredito()
+      ? '<button class="btn btn-sm" onclick="autorizarCredito(\''+esc(id)+'\')">Autorizar crédito</button>'
+        + '<button class="btn btn-sm btn-ghost" onclick="negarCredito(\''+esc(id)+'\')">Negar</button>'
+      : '<span class="mini">Quem autoriza crédito de cliente é o financeiro.</span>');
+  }else if(st==='pendente' && podeAprovar){
     extra+='<button class="btn btn-sm" onclick="assinar(\''+esc(id)+'\')">Assinar'+(num(d.valor)>0?' · '+fmtR$(d.valor):'')+'</button>'
         + (deOrigemComodato(d)?''
            : deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost" onclick="devolverFin(\''+esc(id)+'\')">↩ Devolver ao financeiro</button>'
@@ -1977,6 +1983,84 @@ function deOrigemPecas(d){ return !!(d && d.origem && d.origem.app==='pecas' && 
    a manutenção ("aberta"); recusar marca o pedido como "recusada". Mesma ideia
    do Peças: os dois lados gravam juntos, num lote só. */
 function deOrigemComodato(d){ return !!(d && d.origem && d.origem.app==='comodato' && d.origem.solicitacaoId); }
+/* Crédito de cliente: veio do App Comercial (cadastro com boleto ou pedido de prazo).
+   Quem decide é o FINANCEIRO, não a diretoria: ele informa o limite e o prazo, ou nega
+   com o motivo. A decisão volta sozinha para o Comercial, gravada no próprio cliente. */
+function deOrigemCredito(d){ return !!(d && d.origem && d.origem.app==='comercial'
+  && (d.modelo==='credito' || d.tipo==='Crédito de cliente') && d.origem.clienteId); }
+function decideCredito(){ return ehFinanceiro || ehAdmin; }
+function credResumo(d){
+  var c=d.cliente||{};
+  return '<div class="card" style="margin-bottom:12px">'
+    + '<div><span class="tag">Crédito de cliente</span><span class="tag">'+esc(c.vendedor||'—')+'</span></div>'
+    + '<div class="doc-desc" style="margin-top:8px"><b>'+esc(c.nome||d.titulo||'')+'</b>'
+    + (c.razao?'<br>'+esc(c.razao):'')
+    + (c.cnpj?'<br>CNPJ/CPF: '+esc(c.cnpj):'')
+    + ([c.cidade, c.rota?'rota '+c.rota:''].filter(Boolean).length?'<br>'+esc([c.cidade, c.rota?'rota '+c.rota:''].filter(Boolean).join(' · ')):'')
+    + (c.telefone?'<br>Telefone: '+esc(c.telefone):'')
+    + '</div>'
+    + '<div class="doc-meta" style="margin-top:8px">Pedido: '
+    + (num(d.limitePedido)>0?'limite '+fmtR$(d.limitePedido):'limite não informado')
+    + (num(d.prazoPedido)>0?' · prazo '+num(d.prazoPedido)+' dias':'')+'</div></div>';
+}
+window.autorizarCredito=function(id){
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d || !deOrigemCredito(d) || d.status!=='pendente') return;
+  if(!decideCredito()){ alert('Quem autoriza crédito de cliente é o financeiro.'); return; }
+  modal({
+    titulo:'Autorizar crédito', sub:esc((d.cliente||{}).nome||d.titulo||''),
+    body:'<div class="alert a-info">O limite e o prazo que você informar voltam para o App Comercial, na ficha do cliente.</div>'
+       + credResumo(d)
+       + '<div class="fld"><label>Limite autorizado (R$)</label><input type="text" id="cr-lim" inputmode="decimal" value="'+(num(d.limitePedido)>0?String(num(d.limitePedido)).replace('.',','):'')+'"></div>'
+       + '<div class="fld"><label>Prazo autorizado (dias)</label><input type="number" id="cr-prz" min="0" max="180" value="'+(num(d.prazoPedido)>0?num(d.prazoPedido):'')+'"></div>'
+       + '<div class="fld"><label>Observação</label><input type="text" id="cr-obs" maxlength="180" placeholder="opcional — aparece para o comercial"></div>',
+    ok:'Autorizar',
+    onOk:function(){
+      var lim=numBRaut((document.getElementById('cr-lim')||{}).value||'');
+      var prz=parseInt((document.getElementById('cr-prz')||{}).value||'0',10)||0;
+      if(!(lim>0)){ alert('Informe o limite autorizado.'); return false; }
+      if(!prz){ alert('Informe o prazo autorizado, em dias.'); return false; }
+      var obs=String((document.getElementById('cr-obs')||{}).value||'').trim(), em=agora();
+      gravaCredito(id, d, {
+        status:'aprovado', codigo:novoCodigo(),
+        creditoLimite:lim, creditoPrazo:prz, obsAprovacao:obs,
+        aprovadoPor:sessaoEmail, aprovadoNome:sessaoNome, aprovadoEm:em
+      }, { credStatus:'aprovado', credLimite:lim, credPrazo:prz, credObs:obs,
+           credPor:sessaoEmail, credEm:em }, 'autorizar o crédito');
+    }
+  });
+};
+window.negarCredito=function(id){
+  var d=docs.filter(function(x){ return x.firestoreId===id; })[0];
+  if(!d || !deOrigemCredito(d) || d.status!=='pendente') return;
+  if(!decideCredito()){ alert('Quem decide crédito de cliente é o financeiro.'); return; }
+  modal({
+    titulo:'Negar crédito', perigo:1, sub:esc((d.cliente||{}).nome||d.titulo||''),
+    body:'<div class="alert a-warn">▲ O motivo volta para o App Comercial, na ficha do cliente.</div>'
+       + '<div class="fld"><label>Motivo</label><input type="text" id="cr-mot" maxlength="180"></div>',
+    ok:'Negar',
+    onOk:function(){
+      var m=String((document.getElementById('cr-mot')||{}).value||'').trim();
+      if(!m){ alert('Informe o motivo — quem pediu precisa saber o porquê.'); return false; }
+      var em=agora();
+      gravaCredito(id, d, { status:'recusado', motivoRecusa:m, recusadoPor:sessaoEmail, recusadoNome:sessaoNome, recusadoEm:em },
+        { credStatus:'devolvido', credObs:m, credPor:sessaoEmail, credEm:em }, 'negar o crédito');
+    }
+  });
+};
+/* grava a decisão e, no mesmo lote, a resposta no cliente do App Comercial */
+function gravaCredito(id, d, dadosAut, dadosCli, rotulo){
+  var lote=writeBatch(dbC);
+  lote.update(doc(dbC,'assinaturas',id), dadosAut);
+  lote.update(doc(dbC,'comClientes',d.origem.clienteId), dadosCli);
+  return lote.commit().catch(function(e){
+    console.error(rotulo+':',e);
+    alert('Não foi possível '+rotulo+': '+(e.code||e.message)
+      + (e.code==='permission-denied' ? '\n\nA resposta precisa ser gravada no cliente, no App Comercial. '
+        + 'Confira se as regras do Firestore com o trecho do crédito foram publicadas. Nada foi gravado.' : ''));
+  });
+}
+function numBRaut(v){ v=String(v==null?'':v).replace(/\s|R\$/g,'').replace(/\./g,'').replace(',','.'); var n=parseFloat(v); return isNaN(n)?0:n; }
 function dadosSolComodato(dadosAut){
   var em=Date.now(), aprov=dadosAut.status==='aprovado';
   var a=aprov ? { status:'aprovado', por:sessaoEmail, nome:sessaoNome, em:em, codigo:dadosAut.codigo||'', obs:dadosAut.obsAprovacao||'' }
@@ -2470,7 +2554,10 @@ function cartao(d, comAcoes){
    + '</div>'
    + '<div class="doc-dir">'+(num(d.valor)>0?'<div class="doc-val">'+fmtR$(d.valor)+'</div>':'<div class="doc-val doc-val0">—</div>')+'</div>';
   h+='<div class="doc-btns">';
-  if(comAcoes && st==='pendente' && podeAprovar){
+  if(comAcoes && st==='pendente' && deOrigemCredito(d) && decideCredito()){
+    h+='<button class="btn btn-sm" onclick="autorizarCredito(\''+id+'\')">Autorizar crédito</button>'
+     + '<button class="btn btn-sm btn-ghost b-ico" title="Negar" onclick="negarCredito(\''+id+'\')">✕</button>';
+  }else if(comAcoes && st==='pendente' && podeAprovar && !deOrigemCredito(d)){
     h+='<button class="btn btn-sm" onclick="assinar(\''+id+'\')">Assinar</button>'
      + (deOrigemComodato(d)?''
         : deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost b-ico" title="Devolver ao financeiro" onclick="devolverFin(\''+id+'\')">↩</button>'
@@ -2515,7 +2602,10 @@ function barraVisao(){
 }
 function acoesDe(d, comAcoes){
   var st=d.status||'pendente', id=esc(d.firestoreId), h='';
-  if(comAcoes && st==='pendente' && podeAprovar){
+  if(comAcoes && st==='pendente' && deOrigemCredito(d) && decideCredito()){
+    h+='<button class="btn btn-sm" onclick="autorizarCredito(\''+id+'\')">Autorizar crédito</button>'
+     + '<button class="btn btn-sm btn-ghost b-ico" title="Negar" onclick="negarCredito(\''+id+'\')">✕</button>';
+  }else if(comAcoes && st==='pendente' && podeAprovar && !deOrigemCredito(d)){
     h+='<button class="btn btn-sm" onclick="assinar(\''+id+'\')">Assinar</button>'
      + (deOrigemComodato(d)?''
         : deOrigemPecas(d)?'<button class="btn btn-sm btn-ghost b-ico" title="Devolver ao financeiro" onclick="devolverFin(\''+id+'\')">↩</button>'
